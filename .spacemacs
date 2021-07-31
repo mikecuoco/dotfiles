@@ -57,7 +57,6 @@ values."
                org-gcal-client-secret "xQ916mFYycskTJyJOtK2VbDZ"
                org-gcal-file-alist '(("mcuoco12@gmail.com" . "~/Dropbox/org/calendar/personal-schedule.org")
                                      ("mcuoco@ucsd.edu" . "~/Dropbox/org/calendar/ucsd-schedule.org")
-                                     ("broadinstitute.com_74n3gg1q3o1g80hkgd7ighn904@group.calendar.google.com" . "~/Dropbox/org/calendar/seminars-schedule.org")
                                      ("c_egor2q4m86vlkod8memb60u22s@group.calendar.google.com" . "~/Dropbox/org/calendar/class-schedule.org")
                                      )
                )
@@ -449,9 +448,8 @@ explicitly specified that a variable should be set before a package is loaded,
 you should place your code here."
 
   ;; startup settings
-  ;;(global-git-commit-mode t) ;;magit
+  ;;'(global-git-commit-mode t) ;;
   (setq org-startup-indented t
-        org-pretty-entities t
         ;; show actually italicized text instead of /italicized text/
         org-hide-emphasis-markers t
         org-agenda-block-separator ""
@@ -503,7 +501,7 @@ you should place your code here."
   (setq
    deft-directory org_notes
    deft-extensions '("txt" "md" "org" "pdf")
-   ;deft-recursive t
+   deft-recursive t
    )
 
   ;; org-mode refiling
@@ -531,6 +529,7 @@ you should place your code here."
            :file-name "%<%Y%m%d%H%M%S>-${slug}"
            :head "#+TITLE: ${title}\n"
            :unnarrowed t)))
+
 
   ;; reference management with org-roam-bibtex, helm-bibtex, org-ref, and org-noter
   ;; org-ref
@@ -626,8 +625,7 @@ you should place your code here."
                                  ("WAITING" :foreground "orange" :weight bold)
                                  ("HOLD" :foreground "magenta" :weight bold)
                                  ("CANCELLED" :foreground "forest green" :weight bold)
-                                 ("MEETING" :foreground "forest green" :weight bold)
-                                 ("PHONE" :foreground "forest green" :weight bold)))
+                                 ("MEETING" :foreground "forest green" :weight bold)))
 
   ;; Changing a task state is done with C-c C-t KEY
   (setq org-use-fast-todo-selection t)
@@ -637,7 +635,7 @@ you should place your code here."
   ;; inspired by https://tinyurl.com/y5b2ewbt
 
   (org-super-agenda-mode)
-  (setq org-agenda-files (list "~/Dropbox/org" "~/Dropbox/org/calendar")
+  (setq org-agenda-files (directory-files-recursively "~/Dropbox/org" "\\.org$")
         org-super-agenda-header-map nil
         org-deadline-warning-days 10
         org-scheduled-delay-days 0
@@ -672,8 +670,8 @@ you should place your code here."
                                   :category "Inbox"
                                   :log t
                                   :order 10)
-                           (:name "Rotation"
-                                  :category "Rotation"
+                           (:name "Research"
+                                  :category "Research"
                                   :log t
                                   :order 20)
                            (:name "Class"
