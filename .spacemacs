@@ -52,20 +52,23 @@ values."
      git
      markdown
      deft
-     (calendar :variables
-               org-gcal-client-id "1056185480745-ii2m227c28msriviuemilqg0jlnem47n.apps.googleusercontent.com"
-               org-gcal-client-secret "xQ916mFYycskTJyJOtK2VbDZ"
-               org-gcal-file-alist '(("mcuoco12@gmail.com" . "~/Dropbox/org/calendar/personal-schedule.org")
-                                     ("mcuoco@ucsd.edu" . "~/Dropbox/org/calendar/ucsd-schedule.org")
-                                     ("c_egor2q4m86vlkod8memb60u22s@group.calendar.google.com" . "~/Dropbox/org/calendar/class-schedule.org")
-                                     )
-               )
+     ;; did I make a custom layer for calendar?
+     ;;(calendar :variables
+     ;;          org-gcal-client-id "1056185480745-ii2m227c28msriviuemilqg0jlnem47n.apps.googleusercontent.com"
+     ;;          org-gcal-client-secret "xQ916mFYycskTJyJOtK2VbDZ" ;; need to hide this somewhere
+     ;;          org-gcal-file-alist '(("mcuoco12@gmail.com" . "~/Dropbox/org/calendar/personal-schedule.org")
+     ;;                                ("mcuoco@ucsd.edu" . "~/Dropbox/org/calendar/ucsd-schedule.org")
+     ;;                                ("c_egor2q4m86vlkod8memb60u22s@group.calendar.google.com" . "~/Dropbox/org/calendar/class-schedule.org")
+     ;;                                )
+     ;;          )
      ;; org things
      (org :variables
           org-enable-org-journal-support t
           org-enable-hugo-support t
           org-enable-roam-support t
           org-enable-github-support t
+          org-enable-notifications t
+          org-start-notification-daemon-on-startup t
           )
      ;; shell and programming
      (shell :variables
@@ -75,7 +78,7 @@ values."
      shell-scripts
      (vimscript :variables vimscript-backend 'company-vimscript)
      yaml
-     javascript   
+     javascript
      python
      ;; spell-checking
      ;;ess
@@ -96,8 +99,8 @@ values."
      transpose-frame
      org-super-agenda
      helm-dictionary
-     ;org-roam-bibtex
-     ;org-noter
+     org-roam-bibtex
+     org-noter
      )
    ;; A list of packages that cannot be updated.
    dotspacemacs-frozen-packages '()
@@ -113,7 +116,8 @@ values."
    ;; `used-but-keep-unused' installs only the used packages but won't uninstall
    ;; them if they become unused. `all' installs *all* packages supported by
    ;; Spacemacs and never uninstall them. (default is `used-only')
-   dotspacemacs-install-packages 'used-only))
+   dotspacemacs-install-packages 'used-only
+   ))
 
 (defun dotspacemacs/init ()
   "Initialization function.
@@ -366,14 +370,15 @@ values."
    ;; If set to `t' or `relative' line numbers are turned on in all `prog-mode' and
    ;; `text-mode' derivatives. If set to `relative', line numbers are relative.
    ;; This variable can also be set to a property list for finer control:
-   ;; '(:relative nil
-   ;;   :disabled-for-modes dired-mode
-   ;;                       doc-view-mode
-   ;;                       markdown-mode
-   ;;                       org-mode
-   ;;                       pdf-view-mode
-   ;;                       text-mode
-   ;;   :size-limit-kb 1000)
+   ;; NEED TO FIX BELOW
+   ;;'(:relative il
+   ;;  :disabled-for-modes dired-mode
+   ;;                      doc-view-mode
+   ;;                      markdown-mode
+   ;;                      org-mode
+   ;;                      pdf-view-mode
+   ;;                      text-mode
+   ;;  :size-limit-kb 1000)
    ;; (default nil)
    dotspacemacs-line-numbers t
    ;; Code folding method. Possible values are `evil' and `origami'.
@@ -426,7 +431,7 @@ values."
    ;; `trailing' to delete only the whitespace at end of lines, `changed'to
    ;; delete only whitespace for changed lines or `nil' to disable cleanup.
    ;; (default nil)
-   dotspacemacs-whitespace-cleanup "trailing"
+    dotspacemacs-whitespace-cleanup 'trailing
    ))
 
 (defun dotspacemacs/user-init ()
@@ -493,6 +498,8 @@ you should place your code here."
    org_notes "~/Dropbox/org"
    org-mobile-inbox-for-pull "~/Dropbox/org/flagged.org"
    org-mobile-directory "~/Dropbox/Apps/MobileOrg"
+   org-journal-dir "~/Dropbox/org/journal/"
+   ;; org-journal-date-format "%A, %d %B %Y"
    zot_bib "~/Dropbox/zotero_library.bib"
    pdf_path "/Volumes/GoogleDrive/My Drive/zotero"
    )
@@ -516,8 +523,9 @@ you should place your code here."
    org-roam-directory org_notes
    org-directory org_notes
    org-roam-db-location (concat org_notes "org-roam.db")
+   org-roam-v2-ack t
    )
-  (add-hook 'org-mode-hook 'org-roam-mode)
+  ;; (add-hook 'org-mode-hook 'org-roam-mode)
 
   (setq org-roam-capture-templates
         '(("d" "default" plain #'org-roam--capture-get-point "%?"
@@ -857,7 +865,7 @@ This function is called at the very end of Spacemacs initialization."
  '(objed-cursor-color "#e45649")
  '(org-super-agenda-date-format "%A %e %B")
  '(package-selected-packages
-   '(ox-gfm yapfify sphinx-doc pytest pyenv-mode py-isort poetry pippel pipenv pyvenv pip-requirements live-py-mode importmagic epc ctable concurrent cython-mode company-anaconda blacken anaconda-mode pythonic yaml-mode web-beautify tern prettier-js nodejs-repl livid-mode skewer-mode js2-refactor multiple-cursors js2-mode js-doc import-js grizzl impatient-mode simple-httpd dap-mode lsp-treemacs bui lsp-mode add-node-modules-path vimrc-mode helm-gtags ggtags dactyl-mode counsel-gtags insert-shebang flycheck-bashate fish-mode company-shell drag-stuff auctex-latexmk wgrep smex ivy-yasnippet ivy-xref ivy-purpose ivy-hydra ivy-bibtex ivy-avy counsel-projectile counsel swiper xterm-color unfill smeargle shell-pop orgit org-roam emacsql-sqlite3 emacsql org-projectile org-category-capture org-present org-pomodoro alert log4e gntp org-mime org-download mwim multi-term mmm-mode markdown-toc markdown-mode magit-gitflow magit-popup htmlize helm-gitignore helm-company helm-c-yasnippet gnuplot gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe+ git-gutter-fringe fringe-helper git-gutter+ git-gutter gh-md fuzzy flyspell-correct-helm flyspell-correct flycheck-pos-tip pos-tip flycheck evil-magit magit git-commit with-editor transient eshell-z eshell-prompt-extras esh-help diff-hl company-statistics company auto-yasnippet yasnippet auto-dictionary ac-ispell auto-complete ws-butler winum which-key volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint indent-guide hydra lv hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-themes helm-swoop helm-projectile projectile pkg-info epl helm-mode-manager helm-make helm-flx helm-descbinds helm-ag google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired f evil-tutor evil-surround evil-search-highlight-persist highlight evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu elisp-slime-nav dumb-jump dash s diminish define-word column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line helm avy helm-core popup async))
+   '(org-wild-notifier org-roam-bibtex org-noter ox-gfm yapfify sphinx-doc pytest pyenv-mode py-isort poetry pippel pipenv pyvenv pip-requirements live-py-mode importmagic epc ctable concurrent cython-mode company-anaconda blacken anaconda-mode pythonic yaml-mode web-beautify tern prettier-js nodejs-repl livid-mode skewer-mode js2-refactor multiple-cursors js2-mode js-doc import-js grizzl impatient-mode simple-httpd dap-mode lsp-treemacs bui lsp-mode add-node-modules-path vimrc-mode helm-gtags ggtags dactyl-mode counsel-gtags insert-shebang flycheck-bashate fish-mode company-shell drag-stuff auctex-latexmk wgrep smex ivy-yasnippet ivy-xref ivy-purpose ivy-hydra ivy-bibtex ivy-avy counsel-projectile counsel swiper xterm-color unfill smeargle shell-pop orgit org-roam emacsql-sqlite3 emacsql org-projectile org-category-capture org-present org-pomodoro alert log4e gntp org-mime org-download mwim multi-term mmm-mode markdown-toc markdown-mode magit-gitflow magit-popup htmlize helm-gitignore helm-company helm-c-yasnippet gnuplot gitignore-mode gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe+ git-gutter-fringe fringe-helper git-gutter+ git-gutter gh-md fuzzy flyspell-correct-helm flyspell-correct flycheck-pos-tip pos-tip flycheck evil-magit magit git-commit with-editor transient eshell-z eshell-prompt-extras esh-help diff-hl company-statistics company auto-yasnippet yasnippet auto-dictionary ac-ispell auto-complete ws-butler winum which-key volatile-highlights vi-tilde-fringe uuidgen use-package toc-org spaceline powerline restart-emacs request rainbow-delimiters popwin persp-mode pcre2el paradox spinner org-plus-contrib org-bullets open-junk-file neotree move-text macrostep lorem-ipsum linum-relative link-hint indent-guide hydra lv hungry-delete hl-todo highlight-parentheses highlight-numbers parent-mode highlight-indentation helm-themes helm-swoop helm-projectile projectile pkg-info epl helm-mode-manager helm-make helm-flx helm-descbinds helm-ag google-translate golden-ratio flx-ido flx fill-column-indicator fancy-battery eyebrowse expand-region exec-path-from-shell evil-visualstar evil-visual-mark-mode evil-unimpaired f evil-tutor evil-surround evil-search-highlight-persist highlight evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-lisp-state smartparens evil-indent-plus evil-iedit-state iedit evil-exchange evil-escape evil-ediff evil-args evil-anzu anzu evil goto-chg undo-tree eval-sexp-fu elisp-slime-nav dumb-jump dash s diminish define-word column-enforce-mode clean-aindent-mode bind-map bind-key auto-highlight-symbol auto-compile packed aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line helm avy helm-core popup async))
  '(pdf-view-midnight-colors (cons "#383a42" "#fafafa"))
  '(rustic-ansi-faces
    ["#fafafa" "#e45649" "#50a14f" "#986801" "#4078f2" "#a626a4" "#0184bc" "#383a42"])
@@ -882,7 +890,8 @@ This function is called at the very end of Spacemacs initialization."
     (cons 320 "#ae8d8d")
     (cons 340 "#383a42")
     (cons 360 "#383a42")))
- '(vc-annotate-very-old-color nil))
+ '(vc-annotate-very-old-color nil)
+ '(warning-suppress-types '((org-roam) (:warning))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -890,4 +899,3 @@ This function is called at the very end of Spacemacs initialization."
  ;; If there is more than one, they won't work right.
  )
 )
-
