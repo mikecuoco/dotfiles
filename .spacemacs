@@ -494,6 +494,10 @@ you should place your code here."
 
   ;; ===== ALL THINGS ORG BELOW ===== ;;
   ;; set important paths to variables for easy reuse
+  (with-eval-after-load 'org
+    (org-defkey org-mode-map [(meta return)] 'org-meta-return)  ;; Fix for M-RET bug
+    )
+
   (setq
    org_notes "~/Dropbox/org"
    org-mobile-inbox-for-pull "~/Dropbox/org/flagged.org"
