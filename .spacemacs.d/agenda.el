@@ -24,16 +24,62 @@
 ;; (load-directory "~/.spacemacs.d/agenda-views")
 ;; (load "~/.spacemacs.d/agenda-views/my-week.el")
 
+;; TODO: figure out to separate each view into a separate file
 (setq org-agenda-custom-commands
     '(("r" agenda "Research"
         ((org-agenda-span 5)
-        (org-super-agenda-groups
-            '(
-            (:name ""
-            :category "Research")
-            (:discard (:anything t))
-            )
+        (org-agenda-files
+        (append (directory-files-recursively "~/Dropbox/org/learn" "\\.org$")
+                (directory-files-recursively "~/Dropbox/org/research" "\\.org$"))
         ))
+    )
+    ("R" "research"
+         ((agenda "" (
+                        (org-agenda-start-day "+0d")
+                        (org-agenda-span 14)
+                        (org-agenda-files
+                         (append (directory-files-recursively "~/Dropbox/org/learn" "\\.org$")
+                                 (directory-files-recursively "~/Dropbox/org/research" "\\.org$"))
+                         )
+                        (org-agenda-overriding-header "Scheduled")
+                        (org-agenda-repeating-timestamp-show-all nil)
+                        (org-agenda-remove-tags t)
+                        ;;(org-agenda-prefix-format   "  %-3i  %-15b %t%s")
+                        ;;(org-agenda-prefix-format " %-12:c %?-12t %b")
+                        (org-agenda-prefix-format "%-4s ")
+                        ))
+            (alltodo "" (
+                          (org-agenda-overriding-header "Unscheduled")
+                          (org-agenda-files
+                           (append (directory-files-recursively "~/Dropbox/org/learn" "\\.org$")
+                                   (directory-files-recursively "~/Dropbox/org/research" "\\.org$"))
+                           )
+                          (org-agenda-remove-tags t)
+                          ;; (org-agenda-prefix-format " %-3i %-15b %t%s")
+                          ;; (org-agenda-prefix-format " %-12:c %?-12t %b")
+                          (org-agenda-prefix-format " %b%?-12t ")
+                          ;;(org-agenda-todo-keyword-format "")
+                          (org-super-agenda-groups
+                           '((:discard (:deadline past))
+                             (:discard (:deadline today))
+                             (:discard (:deadline future))
+                             (:discard (:scheduled past))
+                             (:discard (:scheduled today))
+                             (:discard (:scheduled future))
+                             (:name "Started"
+                                    :todo "STARTED"
+                                    :order 1)
+                             (:name "Todo"
+                                    :todo "TODO"
+                                    :order 2)
+                             (:name "Waiting"
+                                    :todo "WAITING"
+                                    :order 3)
+                             (:name "On Hold"
+                                    :todo "HOLD"
+                                    :order 4))
+                           )))
+            ))
     )
     ("h" agenda "Other"
         ((org-agenda-span 5)
