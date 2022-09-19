@@ -50,6 +50,9 @@ brew install git-delta # nicer git diffs
 brew install lazygit # easy git gui
 brew install git-open # open github repos from the command line
 brew install git-recent # see recent branches
+brew install git-lfs # version controlled large files
+brew install github-markdown-toc
+git lfs install 
 
 # better `top`
 brew install htop
@@ -84,10 +87,9 @@ brew install trash-cli
 brew install datamash
 brew install xsv
 
-# citations
-brew install pandoc
-
 # bioinfo / data science
+brew install pandoc
+brew install quarto
 brew install cookiecutter
 brew tap brewsci/bio
 brew install r

@@ -19,6 +19,7 @@ brew install --cask google-chrome
 brew install --cask zotero skim # papers
 brew install --cask alfred # system searching
 brew install --cask spotify
+brew install --cask taskade # task management / notes
 
 # communication
 brew install --cask slack 
@@ -55,6 +56,7 @@ brew install --cask screenflow # for screen recording
 brew install --cask vlc
 
 # Spacemacs
+# TODO: maybe remove if I switch editors?
 brew tap d12frosted/emacs-plus
 brew install emacs-plus@28 --with-spacemacs-icon
 brew link emacs-plus
