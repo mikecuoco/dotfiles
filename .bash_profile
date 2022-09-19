@@ -2,10 +2,15 @@
 # Load our dotfiles like ~/.bash_prompt, etc…
 #   ~/.extra can be used for settings you don’t want to commit,
 #   Use it to configure your PATH, thus it being first in line.
-for file in ~/.{bash_prompt,exports,aliases,functions,extra}; do
+for file in ~/.{extra,bash_prompt,exports,aliases,functions}; do
     [ -r "$file" ] && source "$file"
 done
 unset file
+
+# to help sublimelinter etc with finding my PATHS
+case $- in
+   *i*) source ~/.extra
+esac
 
 # generic colouriser
 GRC=`which grc`
@@ -74,7 +79,7 @@ if [[ -n "$ZSH_VERSION" ]]; then  # quit now if in zsh
 fi;
 
 # Sorry, very MacOS centric here. :/
-if which brew > /dev/null; then
+if  which brew > /dev/null; then
 
     # bash completion.
     if [ -f "$(brew --prefix)/share/bash-completion/bash_completion" ]; then
@@ -125,5 +130,28 @@ shopt -s dirspell 2> /dev/null
 # Turn on recursive globbing (enables ** to recurse all directories)
 shopt -s globstar 2> /dev/null
 
+# add brew installed ruby to path
+if [ -d "/opt/homebrew/opt/ruby/bin" ]; then
+  export PATH=/opt/homebrew/opt/ruby/bin:$PATH
+  export PATH=$(gem environment gemdir)/bin:$PATH
+fi
 
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/mcuoco/mambaforge/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/mcuoco/mambaforge/etc/profile.d/conda.sh" ]; then
+        . "/Users/mcuoco/mambaforge/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/mcuoco/mambaforge/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+
+if [ -f "/Users/mcuoco/mambaforge/etc/profile.d/mamba.sh" ]; then
+    . "/Users/mcuoco/mambaforge/etc/profile.d/mamba.sh"
+fi
+# <<< conda initialize <<<
 
