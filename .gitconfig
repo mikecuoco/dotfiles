@@ -12,12 +12,12 @@
 	cherrypick = cherry-pick
 	cherry = cherry-pick
 	cp = cherry-pick
-	diffbranch = !"git diff $(git merge-base HEAD origin/master)"
+	diffbranch = !"git diff $(git merge-base HEAD origin/main)"
 
-	# show commit log of unique commits of this branch (not on master)
-	diffcommitsfrommaster = log --no-merges master..
+	# show commit log of unique commits of this branch (not on main)
+	diffcommitsfrommain = log --no-merges main..
 	# show unified diff of unique commits of this branch
-	difffrommaster = diff master...
+	difffrommain = diff main...
 	# ^^^^ Holy crap two dots vs three dots, so important. https://stackoverflow.com/a/48681527
 
 	# Show the diff between the latest commit and the current state
@@ -110,13 +110,14 @@
 [include]
   path = ~/.gitconfig.local
 
-#[init]
-#	templatedir = ~/.git_template
+[init]
+	defaultBranch = main
 
 [filter "lfs"]
-	clean = git-lfs clean %f
-	smudge = git-lfs smudge %f
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
 	required = true
+	process = git-lfs filter-process
 
 [fetch]
 	prune = true
@@ -131,4 +132,4 @@
 	date = relative
 [user]
 	name = mikecuoco
-	email = mcuoco12@gmail.com
+	email = mcuoco@ucsd.edu
