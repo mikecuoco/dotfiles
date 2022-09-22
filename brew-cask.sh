@@ -19,7 +19,7 @@ brew install --cask google-chrome
 brew install --cask zotero skim # papers
 brew install --cask alfred # system searching
 brew install --cask spotify
-brew install --cask taskade # task management / notes
+brew install --cask todoist # task management
 
 # communication
 brew install --cask slack 
