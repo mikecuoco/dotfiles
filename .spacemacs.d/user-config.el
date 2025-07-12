@@ -18,10 +18,10 @@ you should place your code here."
     "w C-t" 'transpose-frame
     "awp" 'pocket-reader)
   ;; Drag stuff
-  (define-key evil-normal-state-map (kbd "M-<up>") 'drag-stuff-up)
-  (define-key evil-visual-state-map (kbd "M-<up>") 'drag-stuff-up)
-  (define-key evil-normal-state-map (kbd "M-<down>") 'drag-stuff-down)
-  (define-key evil-visual-state-map (kbd "M-<down>") 'drag-stuff-down)
+;;   (define-key evil-normal-state-map (kbd "M-<up>") 'drag-stuff-up)
+;;   (define-key evil-visual-state-map (kbd "M-<up>") 'drag-stuff-up)
+;;   (define-key evil-normal-state-map (kbd "M-<down>") 'drag-stuff-down)
+;;   (define-key evil-visual-state-map (kbd "M-<down>") 'drag-stuff-down)
   ;; (define-key evil-normal-state-map (kbd "C-M-<up>") 'org-move-subtree-up)
   ;; (define-key evil-normal-state-map (kbd "C-M-<down>") 'org-move-subtree-down)
   ;; Map moving to start of line to g h

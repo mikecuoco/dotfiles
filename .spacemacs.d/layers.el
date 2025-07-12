@@ -35,8 +35,8 @@ dotspacemacs-configuration-layers
     pandoc
     helm
     ivy
-    bibtex
-    latex
+    ;; bibtex
+    ;; latex
     (auto-completion :variables
                     auto-completion-enable-snippets-in-popup t
                     auto-completion-enable-help-tooltip t
@@ -93,8 +93,8 @@ dotspacemacs-additional-packages
     transpose-frame
     org-super-agenda
     helm-dictionary
-    org-roam-bibtex
-    org-noter
+    ;; org-roam-bibtex
+    ;; org-noter
     )
 ;; A list of packages that cannot be updated.
 dotspacemacs-frozen-packages '()
