@@ -76,6 +76,35 @@ def main() -> None:
         help="Report Claude context budget (lines, words, estimated tokens per CLAUDE.md)",
     )
 
+    # ── claude ────────────────────────────────────────────────────────────────
+    p_claude = sub.add_parser(
+        "claude",
+        help="Manage Claude Code plugins and MCP server integrations",
+    )
+    claude_sub = p_claude.add_subparsers(
+        dest="claude_command",
+        metavar="SUBCOMMAND",
+    )
+    claude_sub.required = True
+
+    p_setup = claude_sub.add_parser(
+        "setup",
+        help="Idempotently install plugins and MCP servers",
+    )
+    p_setup.add_argument(
+        "--with",
+        dest="extra_groups",
+        action="append",
+        default=[],
+        metavar="GROUP",
+        help="Additional plugin group to install, e.g. bioinformatics (repeatable)",
+    )
+    p_setup.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="Show what would be done without making any changes",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -104,6 +133,20 @@ def main() -> None:
         case "claude-stats":
             from .claude_stats import run_claude_stats
             sys.exit(run_claude_stats())
+
+        case "claude":
+            from . import RESOURCES_DIR
+            from .claude_plugins import run_claude_setup
+            groups = ["default"] + (args.extra_groups or [])
+            statuses = run_claude_setup(
+                resources_dir=RESOURCES_DIR,
+                groups=groups,
+                dry_run=args.dry_run,
+            )
+            # Non-zero exit if any integration failed outright (not auth-only)
+            failed = [s for s in statuses if not s.installed and not args.dry_run
+                      and not s.message.startswith("command not found")]
+            sys.exit(1 if failed else 0)
 
 
 def _list_profiles() -> None:

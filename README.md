@@ -114,6 +114,98 @@ global → profile overlay → project CLAUDE.md → rules/skills → auto-memor
 See [`docs/claude-context.md`](docs/claude-context.md) for the full design,
 memory policy, and how to check context budgets with `dotfiles claude-stats`.
 
+### Plugin and MCP server setup
+
+After installing dotfiles, run the Claude setup command to install managed
+plugins and MCP servers:
+
+```bash
+# Install core integrations (works on all platforms)
+dotfiles claude setup
+
+# Also install bioinformatics/life-science integrations
+dotfiles claude setup --with bioinformatics
+
+# Preview without installing
+dotfiles claude setup --dry-run
+dotfiles claude setup --with bioinformatics --dry-run
+```
+
+`dotfiles doctor` reports the status of each integration after setup.
+
+#### Default integrations
+
+Installed on all supported environments (macOS, Linux, Codespaces, Code Ocean,
+HPC/cluster):
+
+| Integration | Type | Purpose |
+|-------------|------|---------|
+| **GitHub** | Plugin | Repository access, issues, PRs via the GitHub MCP server |
+| **PubMed** | Plugin | Biomedical literature search (NCBI) |
+| **Synapse** | Plugin | Sage Bionetworks collaborative data platform |
+| **Context7** | MCP server | Up-to-date library documentation (no auth required) |
+| **Pyright LSP** | Plugin | Python type checking and in-editor diagnostics |
+
+#### Bioinformatics integrations
+
+Installed with `--with bioinformatics`:
+
+| Integration | Type | Purpose |
+|-------------|------|---------|
+| **bioRxiv** | Plugin | bioRxiv/medRxiv preprint search |
+| **Open Targets** | Plugin | Gene–disease–drug association platform |
+| **ToolUniverse** | MCP server | 600+ scientific bioinformatics tools (Harvard Zitnik Lab) |
+| **scvi-tools** | Plugin (skill) | scVI, scANVI, totalVI, PeakVI, MultiVI workflow skills |
+| **single-cell-rna-qc** | Plugin (skill) | MAD-based quality filtering workflow skills |
+| **Nextflow Development** | Plugin (skill) | nf-core pipeline execution skills |
+| **Scientific Problem Selection** | Plugin (skill) | Research ideation and risk assessment skills |
+
+#### Intentionally not installed
+
+The following life-sciences plugins are available but are **not installed**:
+
+- **10x Genomics** — not needed for this workflow
+- **ChEMBL** — not needed for this workflow
+- **Consensus** — not needed for this workflow
+
+#### Authentication
+
+Installation and authentication are separate steps. Plugins install regardless
+of auth status; doctor reports any outstanding auth requirements.
+
+| Integration | Auth required | How to authenticate |
+|-------------|--------------|---------------------|
+| GitHub | Yes | `gh auth login` or set `GH_TOKEN` |
+| Synapse | Yes | `synapse login` or set `SYNAPSE_AUTH_TOKEN` |
+| Context7 | No | — |
+| Pyright LSP | No | — |
+| PubMed | No (for basic use) | — |
+| ToolUniverse | Depends | See [ToolUniverse docs](https://zitniklab.hms.harvard.edu/ToolUniverse/) |
+| Bioinformatics plugins | No | — |
+
+Credentials are never stored in this repository. Place secrets in `~/.extra`
+(which is gitignored) and export them from your shell profile.
+
+> **Note on claude.ai connectors:** PubMed, Synapse, bioRxiv, and Open Targets
+> also auto-sync to Claude Code when you are logged in at [claude.ai]. The plugin
+> versions installed above work with API-key auth and in environments without a
+> claude.ai session.
+
+#### Ephemeral environments (Codespaces, Code Ocean, containers)
+
+1. Install the package: `uv tool install git+https://github.com/mikecuoco/dotfiles`
+2. Install dotfiles: `dotfiles install`
+3. Install Claude plugins: `dotfiles claude setup [--with bioinformatics]`
+4. Authenticate: set `GH_TOKEN`, `SYNAPSE_AUTH_TOKEN`, etc. in the environment
+
+Plugin setup is independent of the scientific computational pipeline. Code Ocean
+capsules may omit it entirely; it should not affect pipeline reproducibility.
+
+For ToolUniverse, the `tooluniverse` binary must be installed separately before
+`dotfiles claude setup --with bioinformatics` can configure it as an MCP server.
+See the [ToolUniverse documentation](https://zitniklab.hms.harvard.edu/ToolUniverse/)
+for current installation instructions.
+
 ## TO-DO 
 
 - [ ] add git configuration

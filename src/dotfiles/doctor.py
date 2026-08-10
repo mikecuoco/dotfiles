@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .auth import AuthStatus, all_statuses
+from .claude_plugins import PluginStatus, check_plugin_statuses
 from .install import get_resources_dir, read_state
 from .platform import PlatformInfo, detect_platform
 
@@ -41,6 +42,9 @@ class DoctorReport:
     file_statuses: list[FileStatus] = field(default_factory=list)
     tool_statuses: list[ToolStatus] = field(default_factory=list)
     auth_statuses: list[AuthStatus] = field(default_factory=list)
+    # Claude plugin sections — populated only when `claude` CLI is on PATH
+    claude_plugin_statuses: list[PluginStatus] = field(default_factory=list)
+    bio_plugin_statuses: list[PluginStatus] = field(default_factory=list)
 
 
 def run_doctor(as_json: bool = False) -> int:
@@ -93,6 +97,19 @@ def run_doctor(as_json: bool = False) -> int:
     # ── Auth checks ──────────────────────────────────────────────────────────
     report.auth_statuses = all_statuses()
 
+    # ── Claude plugin checks ──────────────────────────────────────────────────
+    # Non-fatal: if claude CLI is absent, both lists remain empty and the
+    # section is omitted from the output.
+    all_plugin_statuses = check_plugin_statuses(resources)
+    report.claude_plugin_statuses = [
+        s for s in all_plugin_statuses
+        if _is_default_plugin(s, resources)
+    ]
+    report.bio_plugin_statuses = [
+        s for s in all_plugin_statuses
+        if not _is_default_plugin(s, resources)
+    ]
+
     # ── Output ──────────────────────────────────────────────────────────────
     if as_json:
         _emit_json(report)
@@ -113,6 +130,24 @@ def run_doctor(as_json: bool = False) -> int:
     if missing_required_auth:
         return 1
     return 0
+
+
+# ── Internal helpers ──────────────────────────────────────────────────────────
+
+def _is_default_plugin(status: PluginStatus, resources: Path) -> bool:
+    """Return True if *status* belongs to the default plugin group."""
+    from .claude_plugins import load_plugin_config
+    try:
+        cfg = load_plugin_config(resources)
+        default_names = {s.name for s in cfg.groups.get("default", _empty_group()).integrations}
+        return status.name in default_names
+    except (FileNotFoundError, KeyError):
+        return False
+
+
+def _empty_group():
+    from .claude_plugins import GroupConfig
+    return GroupConfig(name="", description="", integrations=[])
 
 
 # ── Formatters ────────────────────────────────────────────────────────────────
@@ -159,7 +194,30 @@ def _emit_human(report: DoctorReport) -> None:
         else:
             print(warn(f"{auth.name}: {auth.message}"))
 
+    if report.claude_plugin_statuses or report.bio_plugin_statuses:
+        print("\nClaude integrations")
+        for ps in report.claude_plugin_statuses:
+            _print_plugin_status(ps, ok, warn, fail)
+
+    if report.bio_plugin_statuses:
+        print("\nBioinformatics integrations")
+        for ps in report.bio_plugin_statuses:
+            _print_plugin_status(ps, ok, warn, fail)
+
     print()
+
+
+def _print_plugin_status(ps: PluginStatus, ok, warn, fail) -> None:
+    label = f"{ps.name} ({ps.type})"
+    if ps.installed:
+        line = ok(label)
+        if ps.auth_hint:
+            line += f"  \033[33m— auth: {ps.auth_hint}\033[0m"
+        print(line)
+    else:
+        print(warn(f"{label}: {ps.message}"))
+        if ps.auth_hint:
+            print(f"      auth needed: {ps.auth_hint}")
 
 
 def _emit_json(report: DoctorReport) -> None:
@@ -195,6 +253,26 @@ def _emit_json(report: DoctorReport) -> None:
                 "required": a.required,
             }
             for a in report.auth_statuses
+        ],
+        "claude_plugins": [
+            {
+                "name": p.name,
+                "type": p.type,
+                "installed": p.installed,
+                "message": p.message,
+                "auth_hint": p.auth_hint,
+            }
+            for p in report.claude_plugin_statuses
+        ],
+        "bio_plugins": [
+            {
+                "name": p.name,
+                "type": p.type,
+                "installed": p.installed,
+                "message": p.message,
+                "auth_hint": p.auth_hint,
+            }
+            for p in report.bio_plugin_statuses
         ],
     }
     print(json.dumps(data, indent=2))
