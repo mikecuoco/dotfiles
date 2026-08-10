@@ -13,5 +13,6 @@
   },
   "cleanupPeriodDays": 30,
   "respectGitignore": true,
-  "useAutoModeDuringPlan": true
+  "useAutoModeDuringPlan": true,
+  "remoteControlAtStartup": true
 }
