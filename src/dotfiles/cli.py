@@ -36,6 +36,11 @@ def main() -> None:
         help="Show what would be done without making any changes",
     )
     p_install.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress routine install output; errors are still shown",
+    )
+    p_install.add_argument(
         "--home",
         metavar="DIR",
         help="Override home directory (useful for testing)",
@@ -156,7 +161,12 @@ def main() -> None:
             from pathlib import Path
             from .install import run_install
             home = Path(args.home) if args.home else None
-            ok = run_install(profile=args.profile, dry_run=args.dry_run, home=home)
+            ok = run_install(
+                profile=args.profile,
+                dry_run=args.dry_run,
+                home=home,
+                quiet=args.quiet,
+            )
             sys.exit(0 if ok else 1)
 
         case "doctor":

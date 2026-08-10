@@ -1,10 +1,17 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
-    "allow": [],
-    "deny": []
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(~/.extra)",
+      "Read(~/.extrarc)",
+      "Read(~/.aws/credentials)",
+      "Read(~/.claude/.credentials.json)"
+    ]
   },
-  "env": {},
   "cleanupPeriodDays": 30,
-  "includeCoAuthoredBy": true,
+  "respectGitignore": true,
   "useAutoModeDuringPlan": true
 }

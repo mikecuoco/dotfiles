@@ -63,6 +63,7 @@ inherits = ["linux"]
 links = [
   { src = "codeocean/shell/.exports.codeocean", dst = ".exports.codeocean" },
   { src = "codeocean/claude/CLAUDE.md",         dst = ".claude/CLAUDE.md", mode = "append" },
+  { src = "codeocean/claude/global.json",       dst = ".claude.json", mode = "merge-json" },
 ]
 
 [profiles.codespace]

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-VALID_MODES = frozenset({"link", "append"})
+VALID_MODES = frozenset({"link", "append", "merge-json"})
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,8 @@ class LinkSpec:
       "link"   — create a symlink (default); last entry for a dst wins.
       "append" — concatenate onto whatever the parent linked for this dst;
                  all append entries are collected in order after the base.
+      "merge-json" — recursively merge the source object into a mutable JSON
+                     destination without replacing unrelated keys.
     """
     src: str         # relative to resources/
     dst: str         # relative to $HOME
@@ -89,11 +91,20 @@ def resolve_links(profile_name: str, profiles: dict[str, Profile]) -> list[LinkS
 
     # "link" mode: deduplicate by dst — last occurrence (child) wins.
     # "append" mode: stack after the base link in declaration order.
+    # "merge-json" mode: mutate a standalone JSON destination and must be unique.
     base: dict[str, LinkSpec] = {}
     appends: list[LinkSpec] = []
+    merges: dict[str, LinkSpec] = {}
     for lnk in all_links:
         if lnk.mode == "append":
             appends.append(lnk)
+        elif lnk.mode == "merge-json":
+            if lnk.dst in merges:
+                raise ValueError(
+                    f"Profile '{profile_name}': duplicate merge-json destination "
+                    f"{lnk.dst!r}"
+                )
+            merges[lnk.dst] = lnk
         else:
             base[lnk.dst] = lnk  # last wins
 
@@ -105,4 +116,11 @@ def resolve_links(profile_name: str, profiles: dict[str, Profile]) -> list[LinkS
             f"their dst: {details}"
         )
 
-    return list(base.values()) + appends
+    merge_conflicts = sorted(set(merges) & (set(base) | {item.dst for item in appends}))
+    if merge_conflicts:
+        raise ValueError(
+            f"Profile '{profile_name}': merge-json destination(s) also use link/append: "
+            f"{', '.join(merge_conflicts)}"
+        )
+
+    return list(base.values()) + appends + list(merges.values())

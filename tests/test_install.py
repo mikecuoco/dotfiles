@@ -23,6 +23,43 @@ def test_install_codespace_dry_run(fake_home, capsys):
     assert list(fake_home.rglob(".*")) == []
 
 
+def test_install_is_verbose_by_default(fake_home, capsys):
+    ok = run_install(profile="codespace", dry_run=True, home=fake_home)
+
+    assert ok is True
+    output = capsys.readouterr().out
+    assert "Installing profile: codespace" in output
+    assert "Done:" in output
+
+
+def test_install_quiet_suppresses_routine_output(fake_home, capsys):
+    ok = run_install(
+        profile="codespace",
+        dry_run=True,
+        home=fake_home,
+        quiet=True,
+    )
+
+    assert ok is True
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_install_quiet_still_reports_errors(fake_home, capsys):
+    ok = run_install(
+        profile="nonexistent_profile_xyz",
+        dry_run=True,
+        home=fake_home,
+        quiet=True,
+    )
+
+    assert ok is False
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Unknown profile" in captured.err
+
+
 def test_install_codespace_creates_symlinks(fake_home):
     ok = run_install(profile="codespace", dry_run=False, home=fake_home)
     assert ok is True
@@ -133,3 +170,72 @@ def test_generated_file_updated_without_backup(fake_home, tmp_path):
 
     claude_md = fake_home / ".claude" / "CLAUDE.md"
     assert "<!-- test patch -->" in claude_md.read_text()
+
+
+def test_codeocean_merges_onboarding_without_replacing_claude_state(fake_home):
+    claude_json = fake_home / ".claude.json"
+    original = {
+        "hasCompletedOnboarding": False,
+        "oauthAccount": {"accountUuid": "preserve-me"},
+        "projects": {"/code": {"hasTrustDialogAccepted": True}},
+    }
+    claude_json.write_text(json.dumps(original, indent=2) + "\n")
+
+    ok = run_install(profile="codeocean", dry_run=False, home=fake_home)
+
+    assert ok is True
+    merged = json.loads(claude_json.read_text())
+    assert merged["hasCompletedOnboarding"] is True
+    assert merged["oauthAccount"] == original["oauthAccount"]
+    assert merged["projects"] == original["projects"]
+    assert not claude_json.is_symlink()
+
+
+def test_codeocean_creates_private_claude_global_file(fake_home):
+    run_install(profile="codeocean", dry_run=False, home=fake_home)
+    claude_json = fake_home / ".claude.json"
+
+    assert json.loads(claude_json.read_text()) == {"hasCompletedOnboarding": True}
+    assert claude_json.stat().st_mode & 0o777 == 0o600
+
+
+def test_codeocean_json_merge_is_idempotent(fake_home):
+    run_install(profile="codeocean", dry_run=False, home=fake_home)
+    claude_json = fake_home / ".claude.json"
+    first = claude_json.read_bytes()
+    first_mtime = claude_json.stat().st_mtime_ns
+
+    run_install(profile="codeocean", dry_run=False, home=fake_home)
+
+    assert claude_json.read_bytes() == first
+    assert claude_json.stat().st_mtime_ns == first_mtime
+    assert not list(fake_home.glob(".claude.json.dotfiles-backup.*"))
+
+
+def test_codeocean_json_merge_dry_run_writes_nothing(fake_home):
+    ok = run_install(profile="codeocean", dry_run=True, home=fake_home)
+
+    assert ok is True
+    assert not (fake_home / ".claude.json").exists()
+
+
+def test_codeocean_json_merge_refuses_invalid_existing_state(fake_home):
+    claude_json = fake_home / ".claude.json"
+    claude_json.write_text("not json\n")
+
+    ok = run_install(profile="codeocean", dry_run=False, home=fake_home)
+
+    assert ok is False
+    assert claude_json.read_text() == "not json\n"
+
+
+def test_codeocean_json_merge_refuses_symlink_destination(fake_home):
+    target = fake_home / "elsewhere.json"
+    target.write_text('{"untouched": true}\n')
+    claude_json = fake_home / ".claude.json"
+    claude_json.symlink_to(target)
+
+    ok = run_install(profile="codeocean", dry_run=False, home=fake_home)
+
+    assert ok is False
+    assert json.loads(target.read_text()) == {"untouched": True}

@@ -17,12 +17,15 @@ dotfiles install
 
 # Preview changes without touching anything
 dotfiles install --dry-run
+
+# Suppress routine output (errors are still shown)
+dotfiles install --quiet
 ```
 
 ## CLI reference
 
 ```
-dotfiles install   [-p PROFILE] [-n/--dry-run] [--home DIR]
+dotfiles install   [-p PROFILE] [-n/--dry-run] [-q/--quiet] [--home DIR]
 dotfiles doctor    [--json]
 dotfiles status
 dotfiles auth
@@ -32,7 +35,7 @@ dotfiles skills     install|update|status [--with GROUP]
 
 | Command | What it does |
 |---|---|
-| `install` | Symlink dotfiles for the active (or specified) profile; backs up any existing files |
+| `install` | Verbosely install dotfiles for the active (or specified) profile; `-q` suppresses routine output |
 | `doctor` | Check that all installed symlinks and generated files are healthy |
 | `status` | Show what's currently installed and which profile is active |
 | `auth` | Report authentication status (Anthropic, GitHub, AWS, Mem0) |
@@ -219,17 +222,32 @@ Each profile adds files alongside the common ones. Shell overlays (`.exports.<pr
 | `macos` | `.aliases.macos`, `.exports.macos`, `.functions.macos`, `.conda_build_config.yaml` |
 | `linux` | `.exports.linux` |
 | `cluster` | `.exports.cluster`, `.functions.cluster`, `.Rprofile` |
-| `codeocean` | `.exports.codeocean`, `.claude/CLAUDE.md` (appended to common) |
+| `codeocean` | `.exports.codeocean`, `.claude/CLAUDE.md` (appended), `.claude.json` defaults (merged) |
 | `codespace` | `.exports.codespace` |
 
 ### Profile overlays (`append` mode)
 
 A link declared with `mode = "append"` concatenates its source onto the parent's file rather than replacing it. This is used for profile-specific `CLAUDE.md` additions — the `codeocean` profile appends its own instructions to the common `CLAUDE.md` to produce a single merged file.
 
+### Mutable JSON defaults (`merge-json` mode)
+
+A link declared with `mode = "merge-json"` recursively merges its source object
+into an existing mutable JSON file. Unrelated keys are preserved and writes are
+atomic. The Code Ocean profile uses this to set
+`hasCompletedOnboarding: true` in `~/.claude.json` without copying, committing,
+or replacing Claude's runtime account and project state. This is an internal
+Claude Code compatibility flag rather than a published settings-schema option,
+so it is intentionally scoped to Code Ocean instead of the common profile.
+
+The shared `~/.claude/settings.json` baseline uses Claude's published schema,
+keeps the existing 30-day cleanup and plan-mode preferences, respects
+`.gitignore`, and denies reads of common credential files. Secrets remain in
+environment variables and are never written into Claude settings.
+
 ## How it works
 
-1. **`dotfiles install`** resolves the full link list for the active profile (depth-first through `inherits`), then either symlinks each file into `$HOME` or — when append entries exist for a destination — writes a concatenated regular file.
-2. **Backup on conflict**: if a file already exists at the destination it is renamed to `<name>.dotfiles-backup.<timestamp>` before being replaced.
+1. **`dotfiles install`** resolves the full link list for the active profile (depth-first through `inherits`), then symlinks normal files, concatenates append overlays, and safely merges declared mutable JSON defaults.
+2. **Backup on link conflict**: if a normal link destination already exists it is renamed to `<name>.dotfiles-backup.<timestamp>` before being replaced. Mutable JSON overlays instead preserve unrelated keys and update the file atomically.
 3. **Idempotent**: re-running `install` is safe; unchanged symlinks and up-to-date generated files are skipped.
 4. **State file**: installation details are saved to `~/.config/dotfiles/state.json` so `status` and `doctor` can verify the installation without re-reading the package.
 5. **Active profile**: written to `~/.config/dotfiles/profile` and read by `.bash_profile` to source the right platform overlays at shell startup.

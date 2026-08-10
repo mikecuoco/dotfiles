@@ -83,3 +83,21 @@ def test_doctor_detects_broken_symlink(installed_home, capsys):
     assert code == 1
     captured = capsys.readouterr()
     assert "missing" in captured.out or "✗" in captured.out
+
+
+def test_doctor_accepts_generated_and_merged_codeocean_files(tmp_path, capsys):
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    capsys.readouterr()
+
+    with patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
+        run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    files = {item["path"]: item for item in report["dotfiles"]["files"]}
+    assert files[".claude/CLAUDE.md"]["ok"] is True
+    assert files[".claude/CLAUDE.md"]["message"] == "generated"
+    assert files[".claude.json"]["ok"] is True
+    assert files[".claude.json"]["message"] == "merged"

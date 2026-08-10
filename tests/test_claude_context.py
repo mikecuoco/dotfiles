@@ -10,6 +10,7 @@ intentionally tolerant of wording changes but strict about:
 """
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -24,6 +25,8 @@ from dotfiles.profiles import load_profiles, resolve_links
 GLOBAL_MD = RESOURCES_DIR / "common" / "claude" / "CLAUDE.md"
 CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "claude" / "CLAUDE.md"
 CODEOCEAN_EXPORTS = RESOURCES_DIR / "codeocean" / "shell" / ".exports.codeocean"
+CLAUDE_SETTINGS = RESOURCES_DIR / "common" / "claude" / "settings.json"
+CODEOCEAN_GLOBAL = RESOURCES_DIR / "codeocean" / "claude" / "global.json"
 
 
 def _global_text() -> str:
@@ -93,6 +96,31 @@ def test_codeocean_runtime_storage_points_to_scratch():
     assert "_dotfiles_scratch=\"/scratch\"" in text
     for variable in required:
         assert f"export {variable}=" in text, f"{variable} is not redirected"
+
+
+def test_shared_claude_settings_are_minimal_and_secret_safe():
+    settings = json.loads(CLAUDE_SETTINGS.read_text())
+
+    assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
+    assert settings["cleanupPeriodDays"] == 30
+    assert settings["respectGitignore"] is True
+    assert settings["useAutoModeDuringPlan"] is True
+    assert "includeCoAuthoredBy" not in settings
+    assert "env" not in settings
+    denied = set(settings["permissions"]["deny"])
+    assert {
+        "Read(./.env)",
+        "Read(./secrets/**)",
+        "Read(~/.extra)",
+        "Read(~/.aws/credentials)",
+        "Read(~/.claude/.credentials.json)",
+    } <= denied
+
+
+def test_codeocean_global_defaults_only_skip_onboarding():
+    assert json.loads(CODEOCEAN_GLOBAL.read_text()) == {
+        "hasCompletedOnboarding": True,
+    }
 
 
 # ── content-isolation tests ───────────────────────────────────────────────────

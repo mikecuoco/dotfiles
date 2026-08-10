@@ -77,6 +77,22 @@ def test_codeocean_claude_md_is_append(profiles):
     assert "codeocean" in claude_links[1].src
 
 
+def test_codeocean_global_claude_defaults_are_merged(profiles):
+    links = resolve_links("codeocean", profiles)
+    global_links = [link for link in links if link.dst == ".claude.json"]
+
+    assert len(global_links) == 1
+    assert global_links[0].mode == "merge-json"
+    assert global_links[0].src == "codeocean/claude/global.json"
+
+
+def test_global_claude_defaults_are_codeocean_only(profiles):
+    for name in profiles:
+        links = resolve_links(name, profiles)
+        has_global_defaults = any(link.dst == ".claude.json" for link in links)
+        assert has_global_defaults is (name == "codeocean")
+
+
 def test_append_mode_concat(tmp_path):
     """resolve_links + installer should produce a concatenated file for append-mode."""
     import tomllib
@@ -118,6 +134,21 @@ def test_append_without_base_raises(tmp_path):
     profs = load_profiles(tmp_path)
     with pytest.raises(ValueError, match="no base link"):
         resolve_links("orphan", profs)
+
+
+def test_merge_json_cannot_share_a_link_destination(tmp_path):
+    toml = tmp_path / "profiles.toml"
+    toml.write_text(
+        '[profiles.bad]\ndescription = ""\ninherits = []\n'
+        'links = ['
+        '{ src = "base.json", dst = ".config.json" },'
+        '{ src = "overlay.json", dst = ".config.json", mode = "merge-json" }'
+        ']\n'
+    )
+    profs = load_profiles(tmp_path)
+
+    with pytest.raises(ValueError, match="also use link/append"):
+        resolve_links("bad", profs)
 
 
 def test_all_sources_exist(profiles):

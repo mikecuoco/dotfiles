@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
@@ -24,6 +26,7 @@ class Result(Enum):
     UNCHANGED = auto()           # Already symlinked to the correct target
     LINKED = auto()              # New symlink created
     BACKED_UP_AND_LINKED = auto()  # Existing file backed up, then linked
+    MERGED = auto()              # JSON defaults merged into a mutable file
     DRY = auto()                 # Would have been linked (dry-run)
     ERROR = auto()
 
@@ -62,8 +65,12 @@ def run_install(
     profile: Optional[str] = None,
     dry_run: bool = False,
     home: Optional[Path] = None,
+    quiet: bool = False,
 ) -> bool:
     """Install dotfiles for *profile*.
+
+    Routine progress is verbose by default. If *quiet* is true, only errors are
+    printed.
 
     Returns ``True`` on success, ``False`` if any link failed.
     """
@@ -79,10 +86,11 @@ def run_install(
 
     profile_name = info.platform
     prefix = "[dry-run] " if dry_run else ""
-    print(f"{prefix}Installing profile: {profile_name}")
-    print(f"  Signals : {', '.join(info.signals)}")
-    print(f"  Resources: {resources}")
-    print()
+    if not quiet:
+        print(f"{prefix}Installing profile: {profile_name}")
+        print(f"  Signals : {', '.join(info.signals)}")
+        print(f"  Resources: {resources}")
+        print()
 
     # Resolve links for this profile
     profiles = load_profiles(resources)
@@ -96,18 +104,23 @@ def run_install(
     existing_state = read_state(home)
     prev_generated: set[str] = set((existing_state or {}).get("generated", []))
 
-    # Group links by dst — base (link mode) + any appends for the same dst
+    # Group links by mode. Appends compose with a base link; JSON merges target
+    # standalone mutable files such as ~/.claude.json.
     base_links: dict[str, LinkSpec] = {}
     append_links: dict[str, list[LinkSpec]] = defaultdict(list)
+    merge_links: list[LinkSpec] = []
     for lnk in links:
         if lnk.mode == "append":
             append_links[lnk.dst].append(lnk)
+        elif lnk.mode == "merge-json":
+            merge_links.append(lnk)
         else:
             base_links[lnk.dst] = lnk
 
     # Install each link (concat when a dst has append entries)
     reports: list[_Report] = []
     generated_dsts: list[str] = []
+    merged_dsts: list[str] = []
     for dst_rel, base in base_links.items():
         if dst_rel in append_links:
             srcs = [resources / base.src] + [resources / a.src for a in append_links[dst_rel]]
@@ -120,27 +133,51 @@ def run_install(
         else:
             rpt = _install_link(src=resources / base.src, dst=home / dst_rel, dry_run=dry_run)
         reports.append(rpt)
-        _print_line(rpt)
+        _print_line(rpt, quiet=quiet)
+
+    for lnk in merge_links:
+        rpt = _install_json_merge(
+            src=resources / lnk.src,
+            dst=home / lnk.dst,
+            dry_run=dry_run,
+        )
+        if rpt.result != Result.ERROR:
+            merged_dsts.append(lnk.dst)
+        reports.append(rpt)
+        _print_line(rpt, quiet=quiet)
 
     # Persist state & profile name
     if not dry_run:
-        _write_state(home, profile_name, resources, links, generated_dsts)
+        _write_state(
+            home,
+            profile_name,
+            resources,
+            links,
+            generated_dsts,
+            merged_dsts,
+        )
         _write_profile_file(home, profile_name)
         _configure_git_credential_helper(profile_name)
 
     # Summary
     n_linked = sum(
         1 for r in reports
-        if r.result in (Result.LINKED, Result.BACKED_UP_AND_LINKED, Result.DRY)
+        if r.result in (
+            Result.LINKED,
+            Result.BACKED_UP_AND_LINKED,
+            Result.MERGED,
+            Result.DRY,
+        )
     )
     n_ok = sum(1 for r in reports if r.result == Result.UNCHANGED)
     n_err = sum(1 for r in reports if r.result == Result.ERROR)
 
-    print()
-    print(
-        f"{'[dry-run] ' if dry_run else ''}Done: "
-        f"{n_linked} installed, {n_ok} unchanged, {n_err} errors"
-    )
+    if not quiet:
+        print()
+        print(
+            f"{'[dry-run] ' if dry_run else ''}Done: "
+            f"{n_linked} installed, {n_ok} unchanged, {n_err} errors"
+        )
 
     return n_err == 0
 
@@ -156,10 +193,13 @@ def run_status(home: Optional[Path] = None) -> int:
     print(f"Installed: {state['installed_at']}")
     print(f"Resources: {state['resources_dir']}")
     generated = set(state.get("generated", []))
+    merged = set(state.get("merged", []))
     print(f"\nInstalled files ({len(state['links'])}):")
     for dst_rel, src_rel in sorted(state["links"].items()):
         dst = (home or Path.home()) / dst_rel
-        if dst_rel in generated:
+        if dst_rel in merged:
+            sym = "+" if dst.is_file() and not dst.is_symlink() else "✗"
+        elif dst_rel in generated:
             sym = "~" if dst.exists() else "✗"   # ~ = generated file
         else:
             sym = "✓" if dst.is_symlink() else "✗"
@@ -263,7 +303,82 @@ def _install_concat(
     return _Report(result, dst, srcs[0], backup=backup)
 
 
-def _print_line(rpt: _Report) -> None:
+def _deep_merge_json(
+    destination: dict,
+    overlay: dict,
+) -> dict:
+    """Recursively apply *overlay* to *destination*, preserving other keys."""
+    merged = dict(destination)
+    for key, value in overlay.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_json(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _install_json_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
+    """Atomically merge a JSON object into a mutable destination file."""
+    if not src.is_file():
+        return _Report(Result.ERROR, dst, src, error=f"Source not found: {src}")
+    if dst.is_symlink():
+        return _Report(
+            Result.ERROR,
+            dst,
+            src,
+            error="refusing to merge JSON through a symlink",
+        )
+
+    try:
+        overlay = json.loads(src.read_text(encoding="utf-8"))
+        if not isinstance(overlay, dict):
+            raise ValueError("merge source must contain a JSON object")
+
+        if dst.exists():
+            existing = json.loads(dst.read_text(encoding="utf-8"))
+            if not isinstance(existing, dict):
+                raise ValueError("merge destination must contain a JSON object")
+            file_mode = dst.stat().st_mode & 0o777
+        else:
+            existing = {}
+            file_mode = 0o600
+
+        merged = _deep_merge_json(existing, overlay)
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        return _Report(Result.ERROR, dst, src, error=f"JSON merge failed: {exc}")
+
+    if merged == existing:
+        return _Report(Result.UNCHANGED, dst, src)
+    if dry_run:
+        return _Report(Result.DRY, dst, src)
+
+    temporary: Optional[Path] = None
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=dst.parent,
+            prefix=f".{dst.name}.",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(json.dumps(merged, indent=2) + "\n")
+        os.chmod(temporary, file_mode)
+        os.replace(temporary, dst)
+    except OSError as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        return _Report(Result.ERROR, dst, src, error=f"JSON merge failed: {exc}")
+
+    return _Report(Result.MERGED, dst, src)
+
+
+def _print_line(rpt: _Report, *, quiet: bool = False) -> None:
+    if quiet and rpt.result != Result.ERROR:
+        return
+
     # Show the path relative to home (e.g. .claude/CLAUDE.md not just CLAUDE.md)
     home = Path.home()
     try:
@@ -278,6 +393,8 @@ def _print_line(rpt: _Report) -> None:
             print(f"  → ~/{display}")
         case Result.BACKED_UP_AND_LINKED:
             print(f"  → ~/{display}  (backed up: {rpt.backup.name})")
+        case Result.MERGED:
+            print(f"  + ~/{display}  (merged defaults)")
         case Result.DRY:
             bak = f"  (would back up: {rpt.backup.name})" if rpt.backup else ""
             print(f"  [dry] → ~/{display}{bak}")
@@ -291,6 +408,7 @@ def _write_state(
     resources: Path,
     links: list[LinkSpec],
     generated_dsts: list[str],
+    merged_dsts: list[str],
 ) -> None:
     state_file = home / _STATE_FILE
     state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -300,6 +418,7 @@ def _write_state(
         "installed_at": datetime.now(timezone.utc).isoformat(),
         "links": {lnk.dst: lnk.src for lnk in links},
         "generated": generated_dsts,
+        "merged": merged_dsts,
     }
     state_file.write_text(json.dumps(state, indent=2) + "\n")
 

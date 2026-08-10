@@ -65,10 +65,21 @@ def run_doctor(as_json: bool = False) -> int:
 
     # ── File checks ──────────────────────────────────────────────────────────
     if state:
+        generated = set(state.get("generated", []))
+        merged = set(state.get("merged", []))
         for dst_rel, src_rel in state["links"].items():
             dst = home / dst_rel
             src = resources / src_rel
-            if dst.is_symlink():
+            if dst_rel in generated or dst_rel in merged:
+                kind = "generated" if dst_rel in generated else "merged"
+                report.file_statuses.append(
+                    FileStatus(
+                        dst_rel,
+                        dst.is_file() and not dst.is_symlink(),
+                        kind if dst.is_file() and not dst.is_symlink() else "missing",
+                    )
+                )
+            elif dst.is_symlink():
                 try:
                     if dst.resolve() == src.resolve():
                         report.file_statuses.append(
