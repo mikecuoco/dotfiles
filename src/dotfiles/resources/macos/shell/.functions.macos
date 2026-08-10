@@ -68,27 +68,77 @@ shellswitch() {
 }
 
 # ── VPN (Cisco AnyConnect + 1Password) ───────────────────────────────────────
-# Requires: op (1Password CLI), vpn (Cisco AnyConnect CLI)
-# Add OP_UCSD_VPN_ID and OP_SALK_VPN_ID to ~/.extra (never commit those values).
+# Requires: op (1Password CLI), Cisco Secure Client / AnyConnect CLI
+# Add the VPN item IDs to ~/.extra (never commit those values).
 #
 # Example ~/.extra entry:
 #   export OP_UCSD_VPN_ID="your-1password-item-uuid"
 #   export OP_SALK_VPN_ID="your-1password-item-uuid"
+#   export OP_ALLEN_VPN_ID="your-1password-item-uuid"
 
 connect() {
-    if [[ $1 == "ucsd" ]]; then
-        local PASS
-        PASS="$(op item get "${OP_UCSD_VPN_ID:?set OP_UCSD_VPN_ID in ~/.extra}" \
-            --reveal --fields password)"
-        printf "0\n%s\n%s\ny" "$USER" "$PASS" | vpn -s connect vpn.ucsd.edu
-    elif [[ $1 == "salk" ]]; then
-        local PASS
-        PASS="$(op item get "${OP_SALK_VPN_ID:?set OP_SALK_VPN_ID in ~/.extra}" \
-            --reveal --fields password)"
-        printf "1\n%s\n%s\ny" "$USER" "$PASS" | vpn -s connect vpnfp.salk.edu
+    local credential_name group gateway item_id pass username vpn_cli
+
+    case "$1" in
+        ucsd)
+            credential_name=OP_UCSD_VPN_ID
+            group=0
+            gateway=vpn.ucsd.edu
+            item_id="${OP_UCSD_VPN_ID:-}"
+            ;;
+        salk)
+            credential_name=OP_SALK_VPN_ID
+            group=1
+            gateway=vpnfp.salk.edu
+            item_id="${OP_SALK_VPN_ID:-}"
+            ;;
+        allen)
+            credential_name=OP_ALLEN_VPN_ID
+            group=
+            gateway=vpn.alleninstitute.org
+            item_id="${OP_ALLEN_VPN_ID:-}"
+            ;;
+        *)
+            echo "Usage: connect ucsd|salk|allen" >&2
+            return 1
+            ;;
+    esac
+
+    if command -v vpn &>/dev/null; then
+        vpn_cli="$(command -v vpn)"
+    elif [[ -x /opt/cisco/secureclient/bin/vpn ]]; then
+        vpn_cli=/opt/cisco/secureclient/bin/vpn
+    elif [[ -x /opt/cisco/anyconnect/bin/vpn ]]; then
+        vpn_cli=/opt/cisco/anyconnect/bin/vpn
     else
-        echo "Usage: connect ucsd|salk"
+        echo "Error: Cisco Secure Client VPN CLI was not found" >&2
+        return 127
+    fi
+
+    if [[ -z "$item_id" ]]; then
+        echo "Error: set $credential_name in ~/.extra" >&2
         return 1
+    fi
+    if ! command -v op &>/dev/null; then
+        echo "Error: 1Password CLI (op) is not installed" >&2
+        return 127
+    fi
+
+    if ! username="$(op item get "$item_id" --fields username)"; then
+        echo "Error: could not retrieve the VPN username from 1Password" >&2
+        return 1
+    fi
+    if ! pass="$(op item get "$item_id" --reveal --fields password)"; then
+        echo "Error: could not retrieve the VPN password from 1Password" >&2
+        return 1
+    fi
+
+    if [[ -n "$group" ]]; then
+        printf "%s\n%s\n%s\ny" "$group" "$username" "$pass" | \
+            "$vpn_cli" -s connect "$gateway"
+    else
+        printf "%s\n%s\ny" "$username" "$pass" | \
+            "$vpn_cli" -s connect "$gateway"
     fi
 }
 

@@ -186,7 +186,7 @@ echo $BASH_VERSION # should be 4.x not the old 3.2.X
 
 # setting up the sublime symlink
 ln -sf "/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl" ~/code/bin/subl
-ln -sf "/opt/cisco/anyconnect/bin/vpn" ~/code/bin/vpn
+ln -sf "/opt/cisco/secureclient/bin/vpn" ~/code/bin/vpn
 
 ##############################################################################################################
 ### remaining configuration
