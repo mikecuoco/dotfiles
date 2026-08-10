@@ -216,17 +216,25 @@ def test_claude_stats_output_contains_no_secret_values(capsys):
 
     fake_secrets = [
         "sk-ant-FAKESECRET123",
+        "oauth-FAKESECRET123",
         "ghp_FAKEGITHUBTOKEN456",
+        "synapse-fake-token",
+        "codeocean-fake-token",
         "AKIAFAKEAWSKEY789",
+        "fake-aws-session-token",
         "fake-mem0-key-abc",
         "fake-openai-key-xyz",
     ]
     env_patch = {
         "ANTHROPIC_API_KEY": fake_secrets[0],
-        "GH_TOKEN": fake_secrets[1],
-        "AWS_ACCESS_KEY_ID": fake_secrets[2],
-        "MEM0_API_KEY": fake_secrets[3],
-        "OPENAI_API_KEY": fake_secrets[4],
+        "CLAUDE_CODE_OAUTH_TOKEN": fake_secrets[1],
+        "GH_TOKEN": fake_secrets[2],
+        "SYNAPSE_AUTH_TOKEN": fake_secrets[3],
+        "CODEOCEAN_API_TOKEN": fake_secrets[4],
+        "AWS_ACCESS_KEY_ID": fake_secrets[5],
+        "AWS_SESSION_TOKEN": fake_secrets[6],
+        "MEM0_API_KEY": fake_secrets[7],
+        "OPENAI_API_KEY": fake_secrets[8],
     }
     original = {k: os.environ.get(k) for k in env_patch}
     try:

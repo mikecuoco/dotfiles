@@ -401,7 +401,7 @@ def render_markdown(document: Mapping[str, Any]) -> str:
 
 
 def _token_from_environment(primary: str) -> str | None:
-    for name in dict.fromkeys((primary, "CODEOCEAN_API_TOKEN", "CODEOCEAN_TOKEN")):
+    for name in dict.fromkeys((primary, "CODEOCEAN_API_TOKEN")):
         value = os.environ.get(name)
         if value:
             return value
@@ -436,7 +436,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         metadata_by_id: dict[str, Mapping[str, Any]] = {}
         warnings: list[str] = []
-        domain = args.domain or os.environ.get("CODEOCEAN_DOMAIN") or os.environ.get("CO_DOMAIN")
+        domain = args.domain or os.environ.get("CODEOCEAN_DOMAIN")
         token = _token_from_environment(args.token_env)
         for attachment in attachments:
             try:

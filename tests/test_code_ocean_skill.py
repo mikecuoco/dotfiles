@@ -209,6 +209,23 @@ def test_manifest_merge_adds_api_aws_uri_when_not_curated(monkeypatch):
     assert "/data/pathology" in markdown
 
 
+def test_refresher_uses_canonical_code_ocean_token_name(monkeypatch):
+    module = _load_refresher(monkeypatch)
+    monkeypatch.setenv("CODEOCEAN_API_TOKEN", "canonical-secret")
+    monkeypatch.setenv("CODEOCEAN_TOKEN", "legacy-secret")
+
+    assert module._token_from_environment("CODEOCEAN_API_TOKEN") == "canonical-secret"
+
+    monkeypatch.delenv("CODEOCEAN_API_TOKEN")
+    assert module._token_from_environment("CODEOCEAN_API_TOKEN") is None
+
+
+def test_refresher_has_no_undocumented_code_ocean_aliases():
+    text = REFRESHER.read_text(encoding="utf-8")
+    assert '"CODEOCEAN_TOKEN"' not in text
+    assert 'os.environ.get("CO_DOMAIN")' not in text
+
+
 def test_refresher_end_to_end_with_saved_api_metadata(tmp_path):
     yaml_package = pytest.importorskip("ruamel.yaml")
     asset_id = "01234567-89ab-cdef-0123-456789abcdef"

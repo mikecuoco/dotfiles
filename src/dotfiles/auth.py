@@ -18,15 +18,30 @@ class AuthStatus:
 # ── Individual checks ─────────────────────────────────────────────────────────
 
 def check_anthropic() -> AuthStatus:
-    """Check Claude Code auth: OAuth token env var, API key, or cli login."""
-    # OAuth token (preferred for cross-machine use via ~/.extra)
-    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-        return AuthStatus("Anthropic / Claude", True, "ANTHROPIC_AUTH_TOKEN is set (OAuth)")
-    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-        return AuthStatus("Anthropic / Claude", True, "CLAUDE_CODE_OAUTH_TOKEN is set (OAuth)")
-    # Traditional API key
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    """Check Claude Code auth: API key, subscription OAuth, bearer token, or login."""
+    has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    has_oauth = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
+    if has_api_key and has_oauth:
+        return AuthStatus(
+            "Anthropic / Claude",
+            True,
+            "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN are both set; "
+            "the API key can override subscription OAuth",
+        )
+    if has_api_key:
         return AuthStatus("Anthropic / Claude", True, "ANTHROPIC_API_KEY is set")
+    if has_oauth:
+        return AuthStatus(
+            "Anthropic / Claude",
+            True,
+            "CLAUDE_CODE_OAUTH_TOKEN is set (subscription OAuth)",
+        )
+    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return AuthStatus(
+            "Anthropic / Claude",
+            True,
+            "ANTHROPIC_AUTH_TOKEN is set (custom bearer credential)",
+        )
     # claude.ai login via CLI (per-machine OAuth session)
     if shutil.which("claude"):
         try:
@@ -46,7 +61,8 @@ def check_anthropic() -> AuthStatus:
             pass
     return AuthStatus(
         "Anthropic / Claude", False,
-        "No Claude auth found — set ANTHROPIC_AUTH_TOKEN in ~/.extra or run: claude auth login",
+        "No Claude auth found — run: claude auth login, or set "
+        "CLAUDE_CODE_OAUTH_TOKEN for an ephemeral environment",
     )
 
 
@@ -78,6 +94,47 @@ def check_github() -> AuthStatus:
     return AuthStatus(
         "GitHub", False,
         "GH_TOKEN not set and gh CLI not found — install gh or set GH_TOKEN",
+    )
+
+
+def check_synapse() -> AuthStatus:
+    """Check the canonical Synapse personal-access-token variable."""
+    if os.environ.get("SYNAPSE_AUTH_TOKEN"):
+        return AuthStatus(
+            "Synapse",
+            True,
+            "SYNAPSE_AUTH_TOKEN is set",
+            required=False,
+        )
+    return AuthStatus(
+        "Synapse",
+        False,
+        "SYNAPSE_AUTH_TOKEN not set (optional — skip if not using Synapse)",
+        required=False,
+    )
+
+
+def check_codeocean() -> AuthStatus:
+    """Check the canonical Code Ocean API token and non-secret domain."""
+    has_token = bool(os.environ.get("CODEOCEAN_API_TOKEN"))
+    has_domain = bool(os.environ.get("CODEOCEAN_DOMAIN"))
+    if has_token and has_domain:
+        return AuthStatus(
+            "Code Ocean API",
+            True,
+            "CODEOCEAN_API_TOKEN and CODEOCEAN_DOMAIN are set",
+            required=False,
+        )
+    missing = []
+    if not has_token:
+        missing.append("CODEOCEAN_API_TOKEN")
+    if not has_domain:
+        missing.append("CODEOCEAN_DOMAIN")
+    return AuthStatus(
+        "Code Ocean API",
+        False,
+        f"{', '.join(missing)} not set (optional — required for API enrichment)",
+        required=False,
     )
 
 
@@ -164,7 +221,15 @@ def check_mem0() -> AuthStatus:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def all_statuses() -> list[AuthStatus]:
-    return [check_anthropic(), check_openai(), check_github(), check_aws(), check_mem0()]
+    return [
+        check_anthropic(),
+        check_openai(),
+        check_github(),
+        check_synapse(),
+        check_codeocean(),
+        check_aws(),
+        check_mem0(),
+    ]
 
 
 def run_auth() -> int:

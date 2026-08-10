@@ -159,18 +159,36 @@ The following life-sciences plugins are available but are **not installed**:
 Installation and authentication are separate steps. Plugins install regardless
 of auth status; doctor reports any outstanding auth requirements.
 
-| Integration | Auth required | How to authenticate |
-|-------------|--------------|---------------------|
-| GitHub | Yes | `gh auth login` or set `GH_TOKEN` |
-| Synapse | Yes | `synapse login` or set `SYNAPSE_AUTH_TOKEN` |
-| Context7 | No | — |
-| Pyright LSP | No | — |
-| PubMed | No (for basic use) | — |
-| ToolUniverse | Depends | See [ToolUniverse docs](https://zitniklab.hms.harvard.edu/ToolUniverse/) |
-| Bioinformatics plugins | No | — |
+| Credential | Canonical environment variable | Alternative |
+|------------|--------------------------------|-------------|
+| Claude subscription OAuth | `CLAUDE_CODE_OAUTH_TOKEN` | Generate with `claude setup-token` |
+| Anthropic API key | `ANTHROPIC_API_KEY` | `claude auth login` for interactive use |
+| GitHub | `GH_TOKEN` | `gh auth login` |
+| Synapse | `SYNAPSE_AUTH_TOKEN` | `synapse login` |
+| Code Ocean API | `CODEOCEAN_API_TOKEN` | — |
+| OpenAI API | `OPENAI_API_KEY` | — |
+| Mem0 | `MEM0_API_KEY` | — |
+| AWS access key | `AWS_ACCESS_KEY_ID` | AWS profile or workload identity |
+| AWS secret key | `AWS_SECRET_ACCESS_KEY` | AWS profile or workload identity |
+| AWS temporary session | `AWS_SESSION_TOKEN` | Only for temporary credentials |
 
-Credentials are never stored in this repository. Place secrets in `~/.extra`
-(which is gitignored) and export them from your shell profile.
+Set the non-secret Code Ocean host or URL in `CODEOCEAN_DOMAIN`, and the AWS
+region in `AWS_DEFAULT_REGION` when a tool cannot infer it.
+
+Credentials are never stored in this repository. On a local machine, place
+exports in `~/.extra` (which is gitignored). In Code Ocean, create account
+Secrets with the exact canonical names above; do not add them to a capsule's
+environment recipe, Dockerfile, or committed shell configuration.
+
+Use `CLAUDE_CODE_OAUTH_TOKEN` for the token produced by `claude setup-token`.
+`ANTHROPIC_AUTH_TOKEN` is reserved for a custom bearer-token gateway, not normal
+Claude subscription OAuth. Avoid defining `ANTHROPIC_API_KEY` and
+`CLAUDE_CODE_OAUTH_TOKEN` together because the API key can override subscription
+authentication.
+
+Context7, Pyright LSP, basic PubMed access, and the bundled bioinformatics
+skills do not require tokens. ToolUniverse authentication depends on the tools
+enabled in a particular workflow.
 
 > **Note on claude.ai connectors:** PubMed, Synapse, bioRxiv, and Open Targets
 > also auto-sync to Claude Code when you are logged in at [claude.ai]. The plugin
@@ -182,7 +200,7 @@ Credentials are never stored in this repository. Place secrets in `~/.extra`
 1. Install the package: `uv tool install git+https://github.com/mikecuoco/dotfiles`
 2. Install dotfiles: `dotfiles install`
 3. Install Claude plugins: `dotfiles claude setup [--with bioinformatics]`
-4. Authenticate: set `GH_TOKEN`, `SYNAPSE_AUTH_TOKEN`, etc. in the environment
+4. Authenticate with the canonical environment variables listed above
 
 Plugin setup is independent of the scientific computational pipeline. Code Ocean
 capsules may omit it entirely; it should not affect pipeline reproducibility.

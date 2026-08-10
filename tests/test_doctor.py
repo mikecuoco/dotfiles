@@ -52,10 +52,14 @@ def test_doctor_no_secrets_in_output(installed_home, capsys):
     """Credential values must never appear in doctor output."""
     fake_secrets = {
         "ANTHROPIC_API_KEY": "sk-ant-secret-do-not-leak",
+        "CLAUDE_CODE_OAUTH_TOKEN": "oauth-secret-do-not-leak",
         "GH_TOKEN": "ghs_secret_do_not_leak",
+        "SYNAPSE_AUTH_TOKEN": "synapse-secret-do-not-leak",
+        "CODEOCEAN_API_TOKEN": "codeocean-secret-do-not-leak",
         "MEM0_API_KEY": "mem0-secret-do-not-leak",
         "AWS_ACCESS_KEY_ID": "AKIASECRETDONOTLEAK",
         "AWS_SECRET_ACCESS_KEY": "aws-secret-key-do-not-leak",
+        "AWS_SESSION_TOKEN": "aws-session-token-do-not-leak",
     }
     with patch.dict(os.environ, fake_secrets, clear=False), \
          patch("dotfiles.doctor.Path.home", return_value=installed_home), \
