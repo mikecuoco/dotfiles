@@ -79,7 +79,7 @@ def main() -> None:
     # ── skills ───────────────────────────────────────────────────────────────
     p_skills = sub.add_parser(
         "skills",
-        help="Manage GPTomics bioSkills (bioinformatics skill files for Claude Code)",
+        help="Manage bundled and GPTomics skills for Claude Code",
     )
     skills_sub = p_skills.add_subparsers(
         dest="skills_command",
@@ -89,7 +89,7 @@ def main() -> None:
 
     p_skills_install = skills_sub.add_parser(
         "install",
-        help="Clone bioSkills repo and install skill files into ~/.claude/skills/",
+        help="Install bundled skills and selected GPTomics skills into ~/.claude/skills/",
     )
     p_skills_install.add_argument(
         "--with",
@@ -107,7 +107,7 @@ def main() -> None:
 
     p_skills_update = skills_sub.add_parser(
         "update",
-        help="Pull latest bioSkills repo and refresh any changed skill files",
+        help="Refresh bundled skills and pull the latest GPTomics skills",
     )
     p_skills_update.add_argument(
         "--dry-run", "-n",
@@ -117,7 +117,7 @@ def main() -> None:
 
     skills_sub.add_parser(
         "status",
-        help="Show how many bio-* skill files are installed in ~/.claude/skills/",
+        help="Show dotfiles-managed and GPTomics skills in ~/.claude/skills/",
     )
 
     # ── claude ───────────────────────────────────────────────────────────────
@@ -220,12 +220,12 @@ def main() -> None:
                     statuses = check_skill_statuses(target_dir)
                     total = len(statuses)
                     if total == 0:
-                        print("  – no bio-* skills installed in ~/.claude/skills/")
+                        print("  – no managed skills installed in ~/.claude/skills/")
                         print("    Run: dotfiles skills install")
                     else:
                         from collections import Counter
                         by_cat = Counter(s.category for s in statuses)
-                        print(f"  {total} bioSkill(s) installed in {target_dir}")
+                        print(f"  {total} Claude Code skill(s) found in {target_dir}")
                         for cat, count in sorted(by_cat.items()):
                             print(f"    {cat:<30} {count}")
                     sys.exit(0)

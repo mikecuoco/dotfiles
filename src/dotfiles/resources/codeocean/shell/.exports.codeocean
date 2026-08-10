@@ -9,11 +9,151 @@ if [ -d /var/run/secrets/kubernetes.io ] || [ -n "$CODEOCEAN_ENV" ]; then
     unset LC_ALL
 fi
 
-export CONDA_PKGS_DIRS="/scratch/conda_pkgs"
-export MAMBA_PKGS_DIRS="/scratch/conda_pkgs"
-export PIP_CACHE_DIR="/scratch/pip-cache"
-export TMPDIR="/scratch/tmp"
+# The root filesystem is only ~5 GB. Keep all runtime temp files, caches,
+# environments, and user installations on the larger /scratch volume.
+if [ -d /scratch ]; then
+    _dotfiles_scratch="/scratch"
 
-# Note: Do not `pip install` personal tools inside the Capsule environment —
-# it may affect reproducibility. Install to a user path or rely on the
-# dotfiles package's own install.
+    export TMPDIR="${_dotfiles_scratch}/tmp"
+    export TMP="$TMPDIR"
+    export TEMP="$TMPDIR"
+    export XDG_CACHE_HOME="${_dotfiles_scratch}/cache"
+    export XDG_DATA_HOME="${_dotfiles_scratch}/xdg/data"
+    export XDG_STATE_HOME="${_dotfiles_scratch}/xdg/state"
+
+    export CONDA_PKGS_DIRS="${_dotfiles_scratch}/cache/conda-pkgs"
+    export CONDA_ENVS_PATH="${_dotfiles_scratch}/envs/conda"
+    export MAMBA_ROOT_PREFIX="${_dotfiles_scratch}/mamba"
+    export MAMBA_PKGS_DIRS="$CONDA_PKGS_DIRS"
+    export PIP_CACHE_DIR="${_dotfiles_scratch}/cache/pip"
+    export PYTHONUSERBASE="${_dotfiles_scratch}/python-user"
+    export PYTHONPYCACHEPREFIX="${_dotfiles_scratch}/cache/python-bytecode"
+    export VIRTUALENV_OVERRIDE_APP_DATA="${_dotfiles_scratch}/cache/virtualenv"
+    export PRE_COMMIT_HOME="${_dotfiles_scratch}/cache/pre-commit"
+    export UV_CACHE_DIR="${_dotfiles_scratch}/cache/uv"
+    export UV_TOOL_DIR="${_dotfiles_scratch}/envs/uv-tools"
+    export UV_TOOL_BIN_DIR="${_dotfiles_scratch}/bin"
+    export PIPX_HOME="${_dotfiles_scratch}/envs/pipx"
+    export PIPX_BIN_DIR="${_dotfiles_scratch}/bin"
+    export POETRY_CACHE_DIR="${_dotfiles_scratch}/cache/poetry"
+    export POETRY_DATA_DIR="${_dotfiles_scratch}/poetry"
+    export POETRY_VIRTUALENVS_PATH="${_dotfiles_scratch}/envs/poetry"
+    export WORKON_HOME="${_dotfiles_scratch}/envs/virtualenvs"
+
+    export NPM_CONFIG_CACHE="${_dotfiles_scratch}/cache/npm"
+    export NPM_CONFIG_PREFIX="${_dotfiles_scratch}/npm"
+    export COREPACK_HOME="${_dotfiles_scratch}/cache/corepack"
+    export PNPM_HOME="${_dotfiles_scratch}/pnpm"
+    export BUN_INSTALL="${_dotfiles_scratch}/bun"
+    export CARGO_HOME="${_dotfiles_scratch}/cargo"
+    export RUSTUP_HOME="${_dotfiles_scratch}/rustup"
+    export GOPATH="${_dotfiles_scratch}/go"
+    export GOBIN="${_dotfiles_scratch}/bin"
+    export GOCACHE="${_dotfiles_scratch}/cache/go-build"
+    export GOMODCACHE="${_dotfiles_scratch}/cache/go-mod"
+    export JULIA_DEPOT_PATH="${_dotfiles_scratch}/julia"
+    export RENV_PATHS_CACHE="${_dotfiles_scratch}/cache/renv"
+    export CCACHE_DIR="${_dotfiles_scratch}/cache/ccache"
+
+    export HF_HOME="${_dotfiles_scratch}/cache/huggingface"
+    export TORCH_HOME="${_dotfiles_scratch}/cache/torch"
+    export TORCH_EXTENSIONS_DIR="${_dotfiles_scratch}/build/torch-extensions"
+    export CUDA_CACHE_PATH="${_dotfiles_scratch}/cache/cuda"
+    export TRITON_CACHE_DIR="${_dotfiles_scratch}/cache/triton"
+    export JAX_COMPILATION_CACHE_DIR="${_dotfiles_scratch}/cache/jax"
+    export NUMBA_CACHE_DIR="${_dotfiles_scratch}/cache/numba"
+    export CUPY_CACHE_DIR="${_dotfiles_scratch}/cache/cupy"
+    export KERAS_HOME="${_dotfiles_scratch}/cache/keras"
+    export MPLCONFIGDIR="${_dotfiles_scratch}/cache/matplotlib"
+    export IPYTHONDIR="${_dotfiles_scratch}/cache/ipython"
+    export JUPYTER_RUNTIME_DIR="${_dotfiles_scratch}/runtime/jupyter"
+    export JUPYTER_DATA_DIR="${_dotfiles_scratch}/xdg/data/jupyter"
+    export R_LIBS_USER="${_dotfiles_scratch}/R/library"
+    export DASK_TEMPORARY_DIRECTORY="${_dotfiles_scratch}/tmp/dask"
+    export JOBLIB_TEMP_FOLDER="${_dotfiles_scratch}/tmp/joblib"
+    export RAY_TMPDIR="${_dotfiles_scratch}/tmp/ray"
+    export WANDB_DIR="${_dotfiles_scratch}/runtime/wandb"
+    export WANDB_CACHE_DIR="${_dotfiles_scratch}/cache/wandb"
+    export WANDB_ARTIFACT_DIR="${_dotfiles_scratch}/runtime/wandb-artifacts"
+    export APPTAINER_CACHEDIR="${_dotfiles_scratch}/cache/apptainer"
+    export APPTAINER_TMPDIR="${_dotfiles_scratch}/tmp/apptainer"
+    export SINGULARITY_CACHEDIR="$APPTAINER_CACHEDIR"
+    export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
+
+    mkdir -p \
+        "$TMPDIR" \
+        "${_dotfiles_scratch}/build" \
+        "$XDG_CACHE_HOME" \
+        "$XDG_DATA_HOME" \
+        "$XDG_STATE_HOME" \
+        "$CONDA_PKGS_DIRS" \
+        "$CONDA_ENVS_PATH" \
+        "$MAMBA_ROOT_PREFIX" \
+        "$PYTHONUSERBASE" \
+        "$PYTHONPYCACHEPREFIX" \
+        "$VIRTUALENV_OVERRIDE_APP_DATA" \
+        "$PRE_COMMIT_HOME" \
+        "$UV_TOOL_DIR" \
+        "$UV_TOOL_BIN_DIR" \
+        "$PIPX_HOME" \
+        "$POETRY_CACHE_DIR" \
+        "$POETRY_DATA_DIR" \
+        "$POETRY_VIRTUALENVS_PATH" \
+        "$WORKON_HOME" \
+        "$NPM_CONFIG_CACHE" \
+        "$NPM_CONFIG_PREFIX" \
+        "$COREPACK_HOME" \
+        "$PNPM_HOME" \
+        "$BUN_INSTALL" \
+        "$CARGO_HOME" \
+        "$RUSTUP_HOME" \
+        "$GOPATH" \
+        "$GOBIN" \
+        "$GOCACHE" \
+        "$GOMODCACHE" \
+        "$JULIA_DEPOT_PATH" \
+        "$RENV_PATHS_CACHE" \
+        "$CCACHE_DIR" \
+        "$HF_HOME" \
+        "$TORCH_HOME" \
+        "$TORCH_EXTENSIONS_DIR" \
+        "$CUDA_CACHE_PATH" \
+        "$TRITON_CACHE_DIR" \
+        "$JAX_COMPILATION_CACHE_DIR" \
+        "$NUMBA_CACHE_DIR" \
+        "$CUPY_CACHE_DIR" \
+        "$KERAS_HOME" \
+        "$MPLCONFIGDIR" \
+        "$IPYTHONDIR" \
+        "$JUPYTER_RUNTIME_DIR" \
+        "$JUPYTER_DATA_DIR" \
+        "$R_LIBS_USER" \
+        "$DASK_TEMPORARY_DIRECTORY" \
+        "$JOBLIB_TEMP_FOLDER" \
+        "$RAY_TMPDIR" \
+        "$WANDB_DIR" \
+        "$WANDB_CACHE_DIR" \
+        "$WANDB_ARTIFACT_DIR" \
+        "$APPTAINER_CACHEDIR" \
+        "$APPTAINER_TMPDIR"
+
+    for _dotfiles_bin in \
+        "$UV_TOOL_BIN_DIR" \
+        "${NPM_CONFIG_PREFIX}/bin" \
+        "${PNPM_HOME}" \
+        "${BUN_INSTALL}/bin" \
+        "${CARGO_HOME}/bin" \
+        "$GOBIN"; do
+        case ":$PATH:" in
+            *":${_dotfiles_bin}:"*) ;;
+            *) PATH="${_dotfiles_bin}:$PATH" ;;
+        esac
+    done
+    export PATH
+
+    ulimit -c 0 2>/dev/null || true
+    unset _dotfiles_bin _dotfiles_scratch
+fi
+
+# Install personal tools into a /scratch environment or user prefix. Record
+# scientific dependencies in environment recipes/locks for reproducibility.

@@ -1,15 +1,15 @@
 # claude/skills.toml — GPTomics bioSkills configuration.
 #
-# Declares which bioSkills categories to install into ~/.claude/skills/.
-# Skills are fetched from the GPTomics/bioSkills GitHub repository and
-# copied as standalone markdown files (bio-<category>-<skill>.md).
+# Declares which GPTomics bioSkills categories to install alongside the
+# first-party directories bundled under claude/skills/. GPTomics skills are
+# fetched and copied as standalone markdown files (bio-<category>-<skill>.md).
 #
 # Usage:
-#   dotfiles skills install                    # default group
+#   dotfiles skills install                    # bundled + default GPTomics group
 #   dotfiles skills install --with spatial     # default + spatial
 #   dotfiles skills install --with all         # everything (561 skills)
 #   dotfiles skills update                     # re-pull and refresh changed files
-#   dotfiles skills status                     # count installed bio-* skills
+#   dotfiles skills status                     # show bundled and bio-* skills
 
 # ── Source repository ─────────────────────────────────────────────────────────
 [repo]

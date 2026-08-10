@@ -46,7 +46,7 @@ class DoctorReport:
     # Claude plugin sections — populated only when `claude` CLI is on PATH
     claude_plugin_statuses: list[PluginStatus] = field(default_factory=list)
     bio_plugin_statuses: list[PluginStatus] = field(default_factory=list)
-    # bioSkills section — populated from ~/.claude/skills/bio-*.md on disk
+    # Claude skills section — first-party managed directories and bio-* files
     skill_statuses: list[SkillStatus] = field(default_factory=list)
 
 
@@ -113,7 +113,7 @@ def run_doctor(as_json: bool = False) -> int:
         if not _is_default_plugin(s, resources)
     ]
 
-    # ── bioSkills checks ──────────────────────────────────────────────────────
+    # ── Claude skill checks ───────────────────────────────────────────────────
     # Non-fatal: warn if none are installed; not an error for exit-code purposes.
     report.skill_statuses = check_skill_statuses(home / ".claude" / "skills")
 
@@ -211,9 +211,9 @@ def _emit_human(report: DoctorReport) -> None:
         for ps in report.bio_plugin_statuses:
             _print_plugin_status(ps, ok, warn, fail)
 
-    print("\nBioSkills")
+    print("\nClaude skills")
     if not report.skill_statuses:
-        print(warn("no bio-* skills installed — run: dotfiles skills install"))
+        print(warn("no managed skills installed — run: dotfiles skills install"))
     else:
         from collections import Counter
         by_cat = Counter(s.category for s in report.skill_statuses)

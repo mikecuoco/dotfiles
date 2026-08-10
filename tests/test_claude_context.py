@@ -23,6 +23,7 @@ from dotfiles.profiles import load_profiles, resolve_links
 
 GLOBAL_MD = RESOURCES_DIR / "common" / "claude" / "CLAUDE.md"
 CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "claude" / "CLAUDE.md"
+CODEOCEAN_EXPORTS = RESOURCES_DIR / "codeocean" / "shell" / ".exports.codeocean"
 
 
 def _global_text() -> str:
@@ -51,6 +52,47 @@ def test_codeocean_overlay_within_budget():
         f"codeocean CLAUDE.md overlay is {tokens} estimated tokens (budget: {OVERLAY_BUDGET}). "
         "Trim it or raise the budget intentionally."
     )
+
+
+def test_codeocean_runtime_storage_points_to_scratch():
+    """Runtime temp, cache, environment, and installation roots stay off `/`."""
+    text = CODEOCEAN_EXPORTS.read_text()
+    required = (
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "XDG_CACHE_HOME",
+        "CONDA_PKGS_DIRS",
+        "CONDA_ENVS_PATH",
+        "MAMBA_ROOT_PREFIX",
+        "PIP_CACHE_DIR",
+        "PYTHONUSERBASE",
+        "PYTHONPYCACHEPREFIX",
+        "VIRTUALENV_OVERRIDE_APP_DATA",
+        "PRE_COMMIT_HOME",
+        "UV_CACHE_DIR",
+        "UV_TOOL_DIR",
+        "PIPX_HOME",
+        "POETRY_VIRTUALENVS_PATH",
+        "NPM_CONFIG_PREFIX",
+        "PNPM_HOME",
+        "BUN_INSTALL",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "GOPATH",
+        "GOBIN",
+        "JULIA_DEPOT_PATH",
+        "HF_HOME",
+        "TORCH_HOME",
+        "TORCH_EXTENSIONS_DIR",
+        "CUDA_CACHE_PATH",
+        "TRITON_CACHE_DIR",
+        "JAX_COMPILATION_CACHE_DIR",
+        "R_LIBS_USER",
+    )
+    assert "_dotfiles_scratch=\"/scratch\"" in text
+    for variable in required:
+        assert f"export {variable}=" in text, f"{variable} is not redirected"
 
 
 # ── content-isolation tests ───────────────────────────────────────────────────

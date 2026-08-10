@@ -1,4 +1,4 @@
-"""Tests for GPTomics bioSkills management.
+"""Tests for bundled and GPTomics Claude Code skill management.
 
 All subprocess calls (git) and filesystem writes are mocked so these tests run
 without network access or a live bioSkills installation.
@@ -16,6 +16,7 @@ from dotfiles.claude_skills import (
     SkillsConfig,
     check_skill_statuses,
     load_skills_config,
+    run_bundled_skills_setup,
     run_skills_setup,
 )
 from dotfiles.install import get_resources_dir
@@ -105,6 +106,161 @@ def _fake_skill_tree(tmp_path: Path, entries: list[tuple[str, str, str]]) -> Pat
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
     return cache
+
+
+def _fake_bundled_skill(
+    tmp_path: Path,
+    name: str = "example-skill",
+    files: dict[str, str] | None = None,
+) -> Path:
+    """Create a resources tree containing one first-party skill."""
+    resources = tmp_path / "resources"
+    skill = resources / "claude" / "skills" / name
+    skill.mkdir(parents=True)
+    content = files or {
+        "SKILL.md": f"---\nname: {name}\ndescription: Test skill\n---\n",
+    }
+    for rel, text in content.items():
+        path = skill / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return resources
+
+
+# ── Bundled first-party skills ────────────────────────────────────────────────
+
+def test_code_ocean_skill_is_packaged():
+    skill = RESOURCES / "claude" / "skills" / "code-ocean-capsule"
+    text = (skill / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "name: code-ocean-capsule" in text
+    assert "interactive-first" in text
+    assert "01_preprocessing/" in text
+    assert "02_genetics/" in text
+    assert "datasets.yaml" in text
+    assert "conda-lock.yml" in text
+    assert (skill / "references" / "capsule-layout.md").is_file()
+    assert (skill / "references" / "datasets.md").is_file()
+    assert (skill / "references" / "environments.md").is_file()
+    assert (skill / "references" / "reproducibility.md").is_file()
+    assert (skill / "scripts" / "refresh_datasets.py").is_file()
+    assert (skill / "scripts" / "check_capsule.py").is_file()
+    assert not (skill / "agents" / "openai.yaml").exists()
+
+
+def test_bundled_skill_directory_is_copied(tmp_path):
+    resources = _fake_bundled_skill(
+        tmp_path,
+        files={
+            "SKILL.md": "---\nname: example-skill\ndescription: Test\n---\n",
+            "references/layout.md": "# Layout\n",
+        },
+    )
+    target = tmp_path / "target"
+
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert statuses == [SkillStatus("example-skill", "first-party", True, "installed")]
+    assert (target / "example-skill" / "SKILL.md").is_file()
+    assert (target / "example-skill" / "references" / "layout.md").is_file()
+    assert (target / ".dotfiles-managed-skills.json").is_file()
+
+
+def test_bundled_skill_install_is_idempotent(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+    skill_md = target / "example-skill" / "SKILL.md"
+    mtime_before = skill_md.stat().st_mtime_ns
+
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert statuses[0].message == "already installed"
+    assert skill_md.stat().st_mtime_ns == mtime_before
+
+
+def test_bundled_skill_update_removes_only_obsolete_managed_files(tmp_path):
+    resources = _fake_bundled_skill(
+        tmp_path,
+        files={"SKILL.md": "old", "references/obsolete.md": "old"},
+    )
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+    user_file = target / "example-skill" / "notes.md"
+    user_file.write_text("keep me", encoding="utf-8")
+
+    source_skill = resources / "claude" / "skills" / "example-skill"
+    (source_skill / "SKILL.md").write_text("new", encoding="utf-8")
+    (source_skill / "references" / "obsolete.md").unlink()
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert statuses[0].message == "updated"
+    assert (target / "example-skill" / "SKILL.md").read_text() == "new"
+    assert not (target / "example-skill" / "references" / "obsolete.md").exists()
+    assert user_file.read_text() == "keep me"
+
+
+def test_bundled_skill_update_refuses_new_path_that_collides_with_user_file(tmp_path):
+    resources = _fake_bundled_skill(tmp_path, files={"SKILL.md": "old"})
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+    user_file = target / "example-skill" / "notes.md"
+    user_file.write_text("user content", encoding="utf-8")
+
+    source_skill = resources / "claude" / "skills" / "example-skill"
+    (source_skill / "SKILL.md").write_text("new", encoding="utf-8")
+    (source_skill / "notes.md").write_text("bundled content", encoding="utf-8")
+
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert not statuses[0].installed
+    assert "unmanaged file conflicts" in statuses[0].message
+    assert (target / "example-skill" / "SKILL.md").read_text() == "old"
+    assert user_file.read_text() == "user content"
+
+
+def test_bundled_skill_refuses_unmanaged_name_collision(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    existing = target / "example-skill"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("user version", encoding="utf-8")
+
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert not statuses[0].installed
+    assert statuses[0].message.startswith("conflict:")
+    assert (existing / "SKILL.md").read_text() == "user version"
+    assert not (target / ".dotfiles-managed-skills.json").exists()
+
+
+def test_bundled_skill_dry_run_writes_nothing(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+
+    statuses = run_bundled_skills_setup(resources, target, dry_run=True)
+
+    assert statuses[0].message == "would install"
+    assert not target.exists()
+
+
+def test_bundled_skill_ignores_unsafe_registry_paths(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / ".dotfiles-managed-skills.json").write_text(
+        '{"skills":{"example-skill":["SKILL.md","../../outside.txt"]}}',
+        encoding="utf-8",
+    )
+    (target / "example-skill").mkdir()
+    (target / "example-skill" / "SKILL.md").write_text("old", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("untouched", encoding="utf-8")
+
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert statuses[0].installed
+    assert outside.read_text() == "untouched"
 
 
 # ── run_skills_setup — dry run ────────────────────────────────────────────────
@@ -341,7 +497,7 @@ def test_all_group_installs_all_categories(tmp_path):
 
 # ── run_skills_setup — error handling ────────────────────────────────────────
 
-def test_git_not_on_path_returns_empty(tmp_path, capsys):
+def test_git_not_on_path_still_installs_bundled_skills(tmp_path, capsys):
     cache  = tmp_path / "cache"
     target = tmp_path / "skills"
 
@@ -350,11 +506,11 @@ def test_git_not_on_path_returns_empty(tmp_path, capsys):
             RESOURCES, groups=["default"], cache_dir=cache, target_dir=target
         )
 
-    assert result == []
+    assert any(s.name == "code-ocean-capsule" and s.installed for s in result)
     assert "git not found" in capsys.readouterr().err
 
 
-def test_git_clone_failure_returns_empty(tmp_path, capsys):
+def test_git_clone_failure_still_installs_bundled_skills(tmp_path, capsys):
     cache  = tmp_path / "cache"
     target = tmp_path / "skills"
 
@@ -365,7 +521,7 @@ def test_git_clone_failure_returns_empty(tmp_path, capsys):
             RESOURCES, groups=["default"], cache_dir=cache, target_dir=target
         )
 
-    assert result == []
+    assert any(s.name == "code-ocean-capsule" and s.installed for s in result)
     assert "git clone failed" in capsys.readouterr().err
 
 
@@ -421,3 +577,13 @@ def test_check_statuses_does_not_raise_on_empty_dir(tmp_path):
     target.mkdir()
     result = check_skill_statuses(target)
     assert result == []
+
+
+def test_check_statuses_includes_managed_first_party_skill(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+
+    result = check_skill_statuses(target)
+
+    assert result == [SkillStatus("example-skill", "first-party", True, "installed")]

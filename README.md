@@ -27,6 +27,7 @@ dotfiles doctor    [--json]
 dotfiles status
 dotfiles auth
 dotfiles profiles
+dotfiles skills     install|update|status [--with GROUP]
 ```
 
 | Command | What it does |
@@ -36,6 +37,7 @@ dotfiles profiles
 | `status` | Show what's currently installed and which profile is active |
 | `auth` | Report authentication status (Anthropic, GitHub, AWS, Mem0) |
 | `profiles` | List all available profiles with descriptions |
+| `skills` | Install bundled first-party and selected GPTomics skills for Claude Code |
 
 ## Profiles
 
@@ -91,6 +93,31 @@ dotfiles claude setup --with bioinformatics --dry-run
 ```
 
 `dotfiles doctor` reports the status of each integration after setup.
+
+### Claude Code skills
+
+First-party skills are versioned under `src/dotfiles/resources/claude/skills/`
+and copied to `~/.claude/skills/` on each workstation. The repository remains
+the source of truth; a small installation registry prevents bundled updates
+from overwriting an unmanaged skill with the same name.
+
+The bundled `code-ocean-capsule` skill provides numbered, analysis-arm-based
+capsule conventions, `/scratch`-first runtime storage, dataset/API provenance
+refresh, Conda locking guidance, and a non-executing reproducibility checker.
+
+```bash
+# Install bundled skills plus the default GPTomics groups
+dotfiles skills install
+
+# Preview without writing or fetching
+dotfiles skills install --dry-run
+
+# Refresh bundled and downloaded skills
+dotfiles skills update
+
+# Show installed first-party and GPTomics skills
+dotfiles skills status
+```
 
 #### Default integrations
 
@@ -221,4 +248,3 @@ The following scripts in `src/dotfiles/resources/macos/setup/` are meant to be r
 
 - `conda-setup.sh` — bootstrap conda on a cluster
 - `singularity-setup.sh` — Singularity / Apptainer configuration
-

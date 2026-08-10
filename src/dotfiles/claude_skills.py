@@ -1,21 +1,28 @@
-"""GPTomics bioSkills management.
+"""Claude Code skill management.
 
-Provides idempotent install/check logic for bioinformatics skill files sourced
-from the GPTomics/bioSkills GitHub repository.  Skills are plain markdown files
-copied into ``~/.claude/skills/`` under the name ``bio-<category>-<skill>.md``.
+Provides idempotent install/check logic for first-party skill directories
+bundled with these dotfiles and bioinformatics skill files sourced from the
+GPTomics/bioSkills GitHub repository.
 
 All subprocess calls (git) are isolated to ``_run_git()`` so they can be
 mocked in tests.
 """
 from __future__ import annotations
 
+import json
+import re
 import shutil
 import subprocess
 import sys
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Optional
+
+
+_MANAGED_SKILLS_FILE = ".dotfiles-managed-skills.json"
+_SKILL_NAME_RE = re.compile(r"[a-z0-9-]{1,64}")
 
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -39,7 +46,7 @@ class SkillsConfig:
 
 @dataclass
 class SkillStatus:
-    """Result of installing or checking one skill file."""
+    """Result of installing or checking one skill."""
 
     name: str           # e.g. "bio-single-cell-clustering"
     category: str       # e.g. "single-cell"
@@ -119,6 +126,17 @@ def _ensure_repo(repo_url: str, cache_dir: Path) -> bool:
 
 # ── Skill discovery ───────────────────────────────────────────────────────────
 
+def _discover_bundled_skills(resources_dir: Path) -> list[Path]:
+    """Return first-party skill directories bundled with the dotfiles."""
+    root = resources_dir / "claude" / "skills"
+    if not root.is_dir():
+        return []
+    return sorted(
+        path for path in root.iterdir()
+        if path.is_dir() and (path / "SKILL.md").is_file()
+    )
+
+
 def _discover_skills(
     cache_dir: Path,
     categories: list[str],
@@ -153,7 +171,226 @@ def _discover_skills(
     return results
 
 
-# ── Setup ─────────────────────────────────────────────────────────────────────
+# ── First-party skill setup ──────────────────────────────────────────────────
+
+def _read_managed_skills(target_dir: Path) -> dict[str, list[str]]:
+    """Read the first-party skill registry, returning an empty registry on error."""
+    path = target_dir / _MANAGED_SKILLS_FILE
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    skills = raw.get("skills", {}) if isinstance(raw, dict) else {}
+    if not isinstance(skills, dict):
+        return {}
+    return {
+        name: [item for item in files if isinstance(item, str) and _safe_relative_path(item)]
+        for name, files in skills.items()
+        if (
+            isinstance(name, str)
+            and _SKILL_NAME_RE.fullmatch(name)
+            and isinstance(files, list)
+        )
+    }
+
+
+def _write_managed_skills(target_dir: Path, skills: dict[str, list[str]]) -> None:
+    """Write the first-party skill registry only when its content changed."""
+    path = target_dir / _MANAGED_SKILLS_FILE
+    content = json.dumps({"skills": skills}, indent=2, sort_keys=True) + "\n"
+    if path.is_file() and path.read_text(encoding="utf-8") == content:
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _skill_files(skill_dir: Path) -> dict[str, Path]:
+    """Return relative path → source path for all regular files in a skill."""
+    return {
+        path.relative_to(skill_dir).as_posix(): path
+        for path in sorted(skill_dir.rglob("*"))
+        if path.is_file() and not path.is_symlink()
+    }
+
+
+def _safe_relative_path(value: str) -> bool:
+    """Return whether a registry path stays inside its skill directory."""
+    if not value or "\\" in value:
+        return False
+    path = PurePosixPath(value)
+    return not path.is_absolute() and path != PurePosixPath(".") and ".." not in path.parts
+
+
+def _destination_path(skill_dir: Path, relative: str) -> Path:
+    """Resolve a safe registry-relative path beneath a skill directory."""
+    if not _safe_relative_path(relative):
+        raise OSError(f"unsafe managed skill path: {relative!r}")
+    return skill_dir.joinpath(*PurePosixPath(relative).parts)
+
+
+def _prepare_destination_parent(skill_dir: Path, relative: str) -> Path:
+    """Create destination parents while refusing nested symlink traversal."""
+    destination = _destination_path(skill_dir, relative)
+    current = skill_dir
+    for part in PurePosixPath(relative).parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            raise OSError(f"refusing nested symlink in managed skill: {current}")
+        if current.exists() and not current.is_dir():
+            raise OSError(f"managed skill parent is not a directory: {current}")
+        current.mkdir(exist_ok=True)
+    return destination
+
+
+def _validate_destination(skill_dir: Path, relative: str) -> Path:
+    """Validate an existing destination path without creating or changing it."""
+    destination = _destination_path(skill_dir, relative)
+    current = skill_dir
+    for part in PurePosixPath(relative).parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            raise OSError(f"refusing nested symlink in managed skill: {current}")
+        if current.exists() and not current.is_dir():
+            raise OSError(f"managed skill parent is not a directory: {current}")
+    return destination
+
+
+def _same_file(src: Path, dst: Path) -> bool:
+    """Return whether two files have identical bytes without raising."""
+    try:
+        return dst.is_file() and src.read_bytes() == dst.read_bytes()
+    except OSError:
+        return False
+
+
+def _bundled_action(
+    source_files: dict[str, Path],
+    previous_files: set[str],
+    destination: Path,
+) -> str:
+    """Describe whether a managed skill needs installation or an update."""
+    if not destination.exists():
+        return "install"
+    if previous_files != set(source_files):
+        return "update"
+    if any(not _same_file(src, destination / rel) for rel, src in source_files.items()):
+        return "update"
+    return "unchanged"
+
+
+def _prune_empty_parents(path: Path, stop: Path) -> None:
+    """Remove empty directories beneath *stop* after deleting managed files."""
+    parent = path.parent
+    while parent != stop and stop in parent.parents:
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+        parent = parent.parent
+
+
+def run_bundled_skills_setup(
+    resources_dir: Path,
+    target_dir: Optional[Path] = None,
+    dry_run: bool = False,
+) -> list[SkillStatus]:
+    """Install bundled first-party skill directories into Claude Code."""
+    if target_dir is None:
+        target_dir = Path.home() / ".claude" / "skills"
+
+    registry = _read_managed_skills(target_dir)
+    updated_registry = dict(registry)
+    statuses: list[SkillStatus] = []
+
+    for source in _discover_bundled_skills(resources_dir):
+        name = source.name
+        destination = target_dir / name
+        managed = name in registry
+
+        if (destination.exists() or destination.is_symlink()) and not managed:
+            status = SkillStatus(
+                name,
+                "first-party",
+                False,
+                "conflict: existing skill is not managed by dotfiles",
+            )
+            statuses.append(status)
+            _print_skill_status(status)
+            continue
+
+        if managed and (destination.is_symlink() or (destination.exists() and not destination.is_dir())):
+            status = SkillStatus(
+                name,
+                "first-party",
+                False,
+                "conflict: managed skill path is not a directory",
+            )
+            statuses.append(status)
+            _print_skill_status(status)
+            continue
+
+        source_files = _skill_files(source)
+        previous_files = set(registry.get(name, []))
+        action = _bundled_action(source_files, previous_files, destination)
+
+        try:
+            # Check the whole update before copying so a newly bundled path can
+            # never overwrite a user-created file inside a managed skill.
+            for rel in source_files:
+                dst = _validate_destination(destination, rel)
+                if rel not in previous_files and (dst.exists() or dst.is_symlink()):
+                    raise OSError(f"unmanaged file conflicts with bundled path: {dst}")
+        except OSError as exc:
+            status = SkillStatus(name, "first-party", False, f"copy failed: {exc}")
+            statuses.append(status)
+            _print_skill_status(status)
+            continue
+
+        if dry_run:
+            message = "already installed" if action == "unchanged" else f"would {action}"
+            status = SkillStatus(name, "first-party", True, message)
+            statuses.append(status)
+            _print_skill_status(status)
+            continue
+
+        try:
+            destination.mkdir(parents=True, exist_ok=True)
+            for rel, src in source_files.items():
+                dst = _prepare_destination_parent(destination, rel)
+                if _same_file(src, dst):
+                    continue
+                if dst.is_symlink():
+                    dst.unlink()
+                shutil.copy2(src, dst)
+
+            for rel in previous_files - set(source_files):
+                obsolete = _destination_path(destination, rel)
+                if obsolete.is_file() or obsolete.is_symlink():
+                    obsolete.unlink()
+                    _prune_empty_parents(obsolete, destination)
+
+            updated_registry[name] = sorted(source_files)
+        except OSError as exc:
+            status = SkillStatus(name, "first-party", False, f"copy failed: {exc}")
+        else:
+            messages = {
+                "install": "installed",
+                "update": "updated",
+                "unchanged": "already installed",
+            }
+            status = SkillStatus(name, "first-party", True, messages[action])
+
+        statuses.append(status)
+        _print_skill_status(status)
+
+    if not dry_run and updated_registry != registry:
+        _write_managed_skills(target_dir, updated_registry)
+
+    return statuses
+
+
+# ── Combined setup ────────────────────────────────────────────────────────────
 
 def run_skills_setup(
     resources_dir: Path,
@@ -163,7 +400,7 @@ def run_skills_setup(
     dry_run: bool = False,
     update: bool = False,
 ) -> list[SkillStatus]:
-    """Idempotently install bioSkills into *target_dir*.
+    """Install bundled first-party skills and selected GPTomics bioSkills.
 
     Args:
         resources_dir: path to the dotfiles ``resources/`` directory.
@@ -177,7 +414,7 @@ def run_skills_setup(
                        (implicit when calling ``dotfiles skills update``).
 
     Returns:
-        A list of :class:`SkillStatus` for each skill file processed.
+        A list of :class:`SkillStatus` for each skill processed.
     """
     if groups is None:
         groups = ["default"]
@@ -186,11 +423,13 @@ def run_skills_setup(
     if target_dir is None:
         target_dir = Path.home() / ".claude" / "skills"
 
+    statuses = run_bundled_skills_setup(resources_dir, target_dir, dry_run=dry_run)
     config = load_skills_config(resources_dir)
 
     # Collect categories for the requested groups.
     all_categories: list[str] = []
     install_all = False
+    valid_groups = 0
     for group_name in groups:
         if group_name not in config.groups:
             print(
@@ -199,11 +438,15 @@ def run_skills_setup(
                 file=sys.stderr,
             )
             continue
+        valid_groups += 1
         g = config.groups[group_name]
         if not g.categories:
             install_all = True  # "all" group — no category filter
         else:
             all_categories.extend(g.categories)
+
+    if valid_groups == 0:
+        return statuses
 
     categories_to_install: list[str] = [] if install_all else all_categories
 
@@ -213,7 +456,7 @@ def run_skills_setup(
     else:
         ok = _ensure_repo(config.repo_url, cache_dir)
         if not ok:
-            return []
+            return statuses
         print(f"  ✓ repo ready: {cache_dir}")
 
     # ── Discover skills ───────────────────────────────────────────────────────
@@ -226,7 +469,7 @@ def run_skills_setup(
         )
         print(f"  [dry] would install skills for: {scope}")
         print(f"  [dry] target: {target_dir}")
-        return []
+        return statuses
 
     skills = _discover_skills(cache_dir, categories_to_install)
 
@@ -237,12 +480,11 @@ def run_skills_setup(
             else ", ".join(sorted(set(categories_to_install)))
         )
         print(f"  – no SKILL.md files found for {scope}", file=sys.stderr)
-        return []
+        return statuses
 
     # ── Copy skill files ──────────────────────────────────────────────────────
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    statuses: list[SkillStatus] = []
     for category, skill_name, skill_md in skills:
         dest_name = f"bio-{category}-{skill_name}.md"
         dest = target_dir / dest_name
@@ -279,7 +521,10 @@ def _install_one(
 
 def _print_skill_status(status: SkillStatus) -> None:
     if status.installed:
-        icon = "→" if status.message in ("installed", "updated") else "✓"
+        if status.message.startswith("would "):
+            icon = "[dry]"
+        else:
+            icon = "→" if status.message in ("installed", "updated") else "✓"
         print(f"  {icon} {status.name}: {status.message}")
     else:
         print(f"  ✗ {status.name}: {status.message}", file=sys.stderr)
@@ -288,7 +533,7 @@ def _print_skill_status(status: SkillStatus) -> None:
 # ── Read-only status (used by doctor) ─────────────────────────────────────────
 
 def check_skill_statuses(target_dir: Optional[Path] = None) -> list[SkillStatus]:
-    """Return status for every ``bio-*.md`` file in *target_dir*.
+    """Return statuses for managed first-party and installed GPTomics skills.
 
     Used by ``dotfiles doctor``.  Never raises; returns an empty list when the
     target directory does not exist.
@@ -300,6 +545,17 @@ def check_skill_statuses(target_dir: Optional[Path] = None) -> list[SkillStatus]
         return []
 
     statuses: list[SkillStatus] = []
+    for name in sorted(_read_managed_skills(target_dir)):
+        skill_md = target_dir / name / "SKILL.md"
+        statuses.append(
+            SkillStatus(
+                name,
+                "first-party",
+                skill_md.is_file(),
+                "installed" if skill_md.is_file() else "missing SKILL.md",
+            )
+        )
+
     for skill_file in sorted(target_dir.glob("bio-*.md")):
         name = skill_file.stem           # e.g. "bio-single-cell-clustering"
         # Derive category from the second hyphen-separated segment (bio-<cat>-<skill>)
