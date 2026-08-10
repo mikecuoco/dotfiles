@@ -10,7 +10,7 @@
 #
 # Note on claude.ai connectors: PubMed, Synapse, bioRxiv, and Open Targets also
 # auto-sync to Claude Code as remote connectors when you are logged in at claude.ai.
-# The plugin versions below work with API-key auth and in environments without claude.ai.
+# The plugin versions below also work in API-key environments without claude.ai OAuth.
 #
 # NOT managed here (handled elsewhere):
 #   ~/.claude/CLAUDE.md    — managed by the dotfiles symlink system (profiles.toml)

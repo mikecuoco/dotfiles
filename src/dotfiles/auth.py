@@ -18,12 +18,35 @@ class AuthStatus:
 # ── Individual checks ─────────────────────────────────────────────────────────
 
 def check_anthropic() -> AuthStatus:
-    """Check ANTHROPIC_API_KEY is set."""
+    """Check Claude Code auth: OAuth token env var, API key, or cli login."""
+    # OAuth token (preferred for cross-machine use via ~/.extra)
+    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return AuthStatus("Anthropic / Claude", True, "ANTHROPIC_AUTH_TOKEN is set (OAuth)")
+    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        return AuthStatus("Anthropic / Claude", True, "CLAUDE_CODE_OAUTH_TOKEN is set (OAuth)")
+    # Traditional API key
     if os.environ.get("ANTHROPIC_API_KEY"):
         return AuthStatus("Anthropic / Claude", True, "ANTHROPIC_API_KEY is set")
+    # claude.ai login via CLI (per-machine OAuth session)
+    if shutil.which("claude"):
+        try:
+            result = subprocess.run(
+                ["claude", "auth", "status", "--json"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                import json
+                data = json.loads(result.stdout)
+                if data.get("loggedIn"):
+                    method = data.get("authMethod", "unknown")
+                    org = data.get("orgName", "")
+                    detail = f"{method} ({org})" if org else method
+                    return AuthStatus("Anthropic / Claude", True, f"claude auth: {detail}")
+        except (subprocess.TimeoutExpired, OSError, ValueError):
+            pass
     return AuthStatus(
         "Anthropic / Claude", False,
-        "ANTHROPIC_API_KEY not set — export it or add to ~/.extra",
+        "No Claude auth found — set ANTHROPIC_AUTH_TOKEN in ~/.extra or run: claude auth login",
     )
 
 
