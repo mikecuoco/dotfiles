@@ -45,7 +45,7 @@ _set_prompts() {
         [[ "$USER" == *root* ]] && style="${red}"
         local part
         part="\[${style}\]${USER}\[${white}\] at \[${orange}\]${HOSTNAME}\[${white}\] in"
-        [ "$USER" != "$DOTFILES_USER" ] && printf '%s ' "$part"
+        printf '%s ' "$part"
     }
 
     # Fast git branch + dirty indicator (>5× faster than mathias's version)
