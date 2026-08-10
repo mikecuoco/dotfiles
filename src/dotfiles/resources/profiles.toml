@@ -27,8 +27,9 @@ links = [
   { src = "common/misc/.dircolors",      dst = ".dircolors" },
   { src = "common/misc/.gemrc",          dst = ".gemrc" },
   { src = "common/misc/.hushlogin",      dst = ".hushlogin" },
-  { src = "common/claude/CLAUDE.md",     dst = ".claude/CLAUDE.md" },
-  { src = "common/claude/settings.json", dst = ".claude/settings.json" },
+  { src = "common/claude/CLAUDE.md",                    dst = ".claude/CLAUDE.md" },
+  { src = "common/claude/settings.json",               dst = ".claude/settings.json" },
+  { src = "common/claude/skills/sea-ad-s3",            dst = ".claude/skills/sea-ad-s3" },
 ]
 
 [profiles.macos]
