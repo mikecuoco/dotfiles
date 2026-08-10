@@ -64,13 +64,6 @@ marketplace = "claude-plugins-official"
 description = "Pyright LSP — Python type checking and in-editor diagnostics"
 # Requires: npm install -g pyright  (provides pyright-langserver binary)
 
-[[groups.default.integrations]]
-name        = "aws-core"
-type        = "plugin"
-marketplace = "claude-plugins-official"
-description = "AWS MCP — full AWS API surface via managed remote server (call APIs, run scripts, search AWS docs)"
-auth_hint   = "AWS credentials via local chain: aws configure  (or SSO/instance role)"
-
 # ── Bioinformatics group ──────────────────────────────────────────────────────
 # Computational biology and life-science integrations.
 # Install with: dotfiles claude setup --with bioinformatics
