@@ -76,7 +76,51 @@ def main() -> None:
         help="Report Claude context budget (lines, words, estimated tokens per CLAUDE.md)",
     )
 
-    # ── claude ────────────────────────────────────────────────────────────────
+    # ── skills ───────────────────────────────────────────────────────────────
+    p_skills = sub.add_parser(
+        "skills",
+        help="Manage GPTomics bioSkills (bioinformatics skill files for Claude Code)",
+    )
+    skills_sub = p_skills.add_subparsers(
+        dest="skills_command",
+        metavar="SUBCOMMAND",
+    )
+    skills_sub.required = True
+
+    p_skills_install = skills_sub.add_parser(
+        "install",
+        help="Clone bioSkills repo and install skill files into ~/.claude/skills/",
+    )
+    p_skills_install.add_argument(
+        "--with",
+        dest="extra_groups",
+        action="append",
+        default=[],
+        metavar="GROUP",
+        help="Additional skill group to install: spatial | genomics | all (repeatable)",
+    )
+    p_skills_install.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="Show what would be done without making any changes",
+    )
+
+    p_skills_update = skills_sub.add_parser(
+        "update",
+        help="Pull latest bioSkills repo and refresh any changed skill files",
+    )
+    p_skills_update.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="Show what would be done without making any changes",
+    )
+
+    skills_sub.add_parser(
+        "status",
+        help="Show how many bio-* skill files are installed in ~/.claude/skills/",
+    )
+
+    # ── claude ───────────────────────────────────────────────────────────────
     p_claude = sub.add_parser(
         "claude",
         help="Manage Claude Code plugins and MCP server integrations",
@@ -133,6 +177,58 @@ def main() -> None:
         case "claude-stats":
             from .claude_stats import run_claude_stats
             sys.exit(run_claude_stats())
+
+        case "skills":
+            from pathlib import Path
+            from . import RESOURCES_DIR
+            from .claude_skills import run_skills_setup, check_skill_statuses
+
+            cache_dir  = Path.home() / ".local" / "share" / "dotfiles" / "bioskills"
+            target_dir = Path.home() / ".claude" / "skills"
+
+            match args.skills_command:
+                case "install":
+                    groups = ["default"] + (args.extra_groups or [])
+                    statuses = run_skills_setup(
+                        resources_dir=RESOURCES_DIR,
+                        groups=groups,
+                        cache_dir=cache_dir,
+                        target_dir=target_dir,
+                        dry_run=args.dry_run,
+                    )
+                    failed = [s for s in statuses if not s.installed and not args.dry_run]
+                    sys.exit(1 if failed else 0)
+
+                case "update":
+                    # Re-pull and refresh; re-uses run_skills_setup which always pulls
+                    # when .git already exists.
+                    from dotfiles.claude_skills import load_skills_config
+                    cfg = load_skills_config(RESOURCES_DIR)
+                    all_groups = list(cfg.groups)
+                    statuses = run_skills_setup(
+                        resources_dir=RESOURCES_DIR,
+                        groups=all_groups,
+                        cache_dir=cache_dir,
+                        target_dir=target_dir,
+                        dry_run=args.dry_run,
+                        update=True,
+                    )
+                    failed = [s for s in statuses if not s.installed and not args.dry_run]
+                    sys.exit(1 if failed else 0)
+
+                case "status":
+                    statuses = check_skill_statuses(target_dir)
+                    total = len(statuses)
+                    if total == 0:
+                        print("  – no bio-* skills installed in ~/.claude/skills/")
+                        print("    Run: dotfiles skills install")
+                    else:
+                        from collections import Counter
+                        by_cat = Counter(s.category for s in statuses)
+                        print(f"  {total} bioSkill(s) installed in {target_dir}")
+                        for cat, count in sorted(by_cat.items()):
+                            print(f"    {cat:<30} {count}")
+                    sys.exit(0)
 
         case "claude":
             from . import RESOURCES_DIR

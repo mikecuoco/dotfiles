@@ -10,6 +10,7 @@ from typing import Optional
 
 from .auth import AuthStatus, all_statuses
 from .claude_plugins import PluginStatus, check_plugin_statuses
+from .claude_skills import SkillStatus, check_skill_statuses
 from .install import get_resources_dir, read_state
 from .platform import PlatformInfo, detect_platform
 
@@ -45,6 +46,8 @@ class DoctorReport:
     # Claude plugin sections — populated only when `claude` CLI is on PATH
     claude_plugin_statuses: list[PluginStatus] = field(default_factory=list)
     bio_plugin_statuses: list[PluginStatus] = field(default_factory=list)
+    # bioSkills section — populated from ~/.claude/skills/bio-*.md on disk
+    skill_statuses: list[SkillStatus] = field(default_factory=list)
 
 
 def run_doctor(as_json: bool = False) -> int:
@@ -109,6 +112,10 @@ def run_doctor(as_json: bool = False) -> int:
         s for s in all_plugin_statuses
         if not _is_default_plugin(s, resources)
     ]
+
+    # ── bioSkills checks ──────────────────────────────────────────────────────
+    # Non-fatal: warn if none are installed; not an error for exit-code purposes.
+    report.skill_statuses = check_skill_statuses(home / ".claude" / "skills")
 
     # ── Output ──────────────────────────────────────────────────────────────
     if as_json:
@@ -204,6 +211,17 @@ def _emit_human(report: DoctorReport) -> None:
         for ps in report.bio_plugin_statuses:
             _print_plugin_status(ps, ok, warn, fail)
 
+    print("\nBioSkills")
+    if not report.skill_statuses:
+        print(warn("no bio-* skills installed — run: dotfiles skills install"))
+    else:
+        from collections import Counter
+        by_cat = Counter(s.category for s in report.skill_statuses)
+        total = len(report.skill_statuses)
+        print(ok(f"{total} skill(s) installed across {len(by_cat)} category(ies)"))
+        for cat, count in sorted(by_cat.items()):
+            print(f"      {cat:<28} {count}")
+
     print()
 
 
@@ -273,6 +291,15 @@ def _emit_json(report: DoctorReport) -> None:
                 "auth_hint": p.auth_hint,
             }
             for p in report.bio_plugin_statuses
+        ],
+        "bioskills": [
+            {
+                "name": s.name,
+                "category": s.category,
+                "installed": s.installed,
+                "message": s.message,
+            }
+            for s in report.skill_statuses
         ],
     }
     print(json.dumps(data, indent=2))
