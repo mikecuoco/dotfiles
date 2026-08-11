@@ -29,6 +29,7 @@ links = [
   { src = "common/misc/.hushlogin",      dst = ".hushlogin" },
   { src = "common/claude/CLAUDE.md",     dst = ".claude/CLAUDE.md" },
   { src = "common/claude/settings.json", dst = ".claude/settings.json" },
+  { src = "common/aws/config",           dst = ".aws/config" },
 ]
 
 [profiles.macos]

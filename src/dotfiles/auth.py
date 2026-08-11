@@ -168,6 +168,13 @@ def check_aws() -> AuthStatus:
                     f"AWS account {acct}{src}",
                     required=False,
                 )
+            sso_session = _find_sso_session()
+            if sso_session:
+                return AuthStatus(
+                    "AWS", False,
+                    f"SSO configured but not logged in — run: aws sso login --sso-session {sso_session}",
+                    required=False,
+                )
             hint = result.stderr.strip()[:120] if result.stderr else "no credentials"
             return AuthStatus(
                 "AWS", False,
@@ -194,6 +201,25 @@ def check_aws() -> AuthStatus:
         "No AWS credentials found (optional)",
         required=False,
     )
+
+
+def _find_sso_session() -> str | None:
+    """Return the first sso-session name found in ~/.aws/config, or None."""
+    import configparser
+    from pathlib import Path
+
+    cfg = Path(os.path.expanduser("~/.aws/config"))
+    if not cfg.exists():
+        return None
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(cfg)
+    except configparser.Error:
+        return None
+    for section in parser.sections():
+        if section.startswith("sso-session "):
+            return section.split(" ", 1)[1].strip()
+    return None
 
 
 def check_openai() -> AuthStatus:
