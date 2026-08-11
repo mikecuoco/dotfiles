@@ -123,3 +123,10 @@
 # Credential helpers and any machine-specific overrides go there too.
 [include]
 	path = ~/.gitconfig.local
+[credential "https://github.com"]
+	helper = gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = !/usr/bin/env gh auth git-credential
+[user]
+	email = mike.cuoco@alleninstitute.org
+	name = Mike Cuoco
