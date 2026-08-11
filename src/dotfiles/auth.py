@@ -98,7 +98,7 @@ def check_github() -> AuthStatus:
 
 
 def check_synapse() -> AuthStatus:
-    """Check the canonical Synapse personal-access-token variable."""
+    """Check Synapse auth: SYNAPSE_AUTH_TOKEN env var or ~/.synapseConfig file."""
     if os.environ.get("SYNAPSE_AUTH_TOKEN"):
         return AuthStatus(
             "Synapse",
@@ -106,10 +106,32 @@ def check_synapse() -> AuthStatus:
             "SYNAPSE_AUTH_TOKEN is set",
             required=False,
         )
+
+    import configparser
+    from pathlib import Path
+    synapse_cfg = Path.home() / ".synapseConfig"
+    if synapse_cfg.exists():
+        cfg = configparser.ConfigParser()
+        cfg.read(synapse_cfg)
+        token = cfg.get("authentication", "authtoken", fallback="")
+        if token:
+            return AuthStatus(
+                "Synapse",
+                True,
+                "~/.synapseConfig found with authtoken",
+                required=False,
+            )
+        return AuthStatus(
+            "Synapse",
+            False,
+            "~/.synapseConfig found but no authtoken under [authentication]",
+            required=False,
+        )
+
     return AuthStatus(
         "Synapse",
         False,
-        "SYNAPSE_AUTH_TOKEN not set (optional — skip if not using Synapse)",
+        "SYNAPSE_AUTH_TOKEN not set and ~/.synapseConfig not found (optional)",
         required=False,
     )
 

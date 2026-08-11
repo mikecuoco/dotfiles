@@ -44,11 +44,12 @@ description = "PubMed — biomedical literature search (NCBI)"
 # Also available as a claude.ai connector when authenticated at claude.ai
 
 [[groups.default.integrations]]
-name        = "synapse"
-type        = "plugin"
-marketplace = "life-sciences"
-description = "Synapse (Sage Bionetworks) — collaborative research data platform"
-auth_hint   = "SYNAPSE_AUTH_TOKEN or: synapse login"
+name          = "synapse"
+type          = "plugin"
+marketplace   = "life-sciences"
+description   = "Synapse (Sage Bionetworks) — collaborative research data platform"
+auth_hint     = "SYNAPSE_AUTH_TOKEN or ~/.synapseConfig"
+requires_file = "~/.synapseConfig"
 # Also available as a claude.ai connector when authenticated at claude.ai
 
 [[groups.default.integrations]]

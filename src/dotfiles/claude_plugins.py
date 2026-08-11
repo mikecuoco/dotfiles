@@ -33,6 +33,8 @@ class IntegrationSpec:
     args: list[str] = field(default_factory=list)
     # optional auth hint shown in doctor / setup output
     auth_hint: str = ""
+    # optional path (expanduser); integration is skipped when the file is absent
+    requires_file: str = ""
 
 
 @dataclass
@@ -79,6 +81,7 @@ def load_plugin_config(resources_dir: Path) -> PluginConfig:
                 command=spec.get("command", ""),
                 args=list(spec.get("args", [])),
                 auth_hint=spec.get("auth_hint", ""),
+                requires_file=spec.get("requires_file", ""),
             )
             for spec in group_data.get("integrations", [])
         ]
@@ -286,6 +289,15 @@ def _process_one(
     dry_run: bool,
 ) -> PluginStatus:
     """Determine whether to install/configure *spec* and do so if needed."""
+    if spec.requires_file:
+        required_path = Path(spec.requires_file).expanduser()
+        if not required_path.exists():
+            return PluginStatus(
+                spec.name, spec.type, False,
+                f"skipped ({spec.requires_file} not found)",
+                spec.auth_hint,
+            )
+
     match spec.type:
         case "plugin":
             return _process_plugin(spec, installed_plugins, dry_run)
@@ -405,6 +417,8 @@ def _print_status_line(status: PluginStatus, dry_run: bool) -> None:
             print(f"  {icon} {status.name}: {status.message}")
         if status.auth_hint:
             print(f"      auth: {status.auth_hint}")
+    elif status.message.startswith("skipped"):
+        print(f"  – {status.name}: {status.message}")
     else:
         print(f"  ✗ {status.name}: {status.message}", file=sys.stderr)
         if status.auth_hint:
