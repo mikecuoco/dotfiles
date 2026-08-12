@@ -4,7 +4,7 @@
 # To find account IDs: open the SSO portal in a browser and log in.
 #   https://identitycenter.amazonaws.com/ssoins-7907e1277625ab90
 # To authenticate after filling in account IDs:
-#   aws sso login --sso-session allen
+#   aws sso login --use-device-code --sso-session allen
 
 [sso-session allen]
 sso_start_url           = https://identitycenter.amazonaws.com/ssoins-7907e1277625ab90

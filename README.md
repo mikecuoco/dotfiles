@@ -186,12 +186,11 @@ For the AWS SSO profiles configured in `~/.aws/config`, use these shell commands
 | `aws-sensitive` | Log in if needed and select the `HighlySensitiveSEAADStorageRW` role |
 | `aws-whoami` | Show the active AWS account and assumed-role ARN |
 | `aws-clear` | Stop selecting an AWS profile in the current shell |
-| `aws-setup storage\|sensitive` | Configure a missing profile with the AWS SSO wizard |
 
 The selected profile remains active for later AWS CLI and SDK commands in that
 terminal. `aws-login storage` and `aws-login sensitive` are the explicit forms.
 Existing profiles are also found by their configured SSO role, even if they have
-long AWS-generated names. Run `aws-setup` only when the requested role is missing.
+long AWS-generated names. Login and setup use the device-code flow by default.
 
 Credentials are never stored in this repository. On a local machine, place
 exports in `~/.extra` (which is gitignored). In Code Ocean, create account

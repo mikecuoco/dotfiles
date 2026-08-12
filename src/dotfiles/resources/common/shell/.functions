@@ -198,14 +198,14 @@ aws-login() {
 
     if ! profile="$(_aws_profile_for_role "$requested" "$expected_role")"; then
         echo "Error: no AWS SSO profile uses the $expected_role role" >&2
-        echo "Run: aws-setup $requested" >&2
+        echo "Run: aws configure sso --use-device-code --profile $requested" >&2
         return 1
     fi
 
     if ! identity="$(command aws sts get-caller-identity \
         --profile "$profile" --query '[Account,Arn]' --output text 2>/dev/null)"; then
         echo "Signing in to the $requested AWS account…"
-        command aws sso login --profile "$profile" || return
+        command aws sso login --use-device-code --profile "$profile" || return
         identity="$(command aws sts get-caller-identity \
             --profile "$profile" --query '[Account,Arn]' --output text)" || return
     fi
@@ -218,29 +218,6 @@ aws-login() {
 
     echo "AWS profile: $profile ($requested)"
     echo "AWS identity: $identity"
-}
-
-# Run the AWS SSO setup wizard for a missing role-backed profile, then select it.
-aws-setup() {
-    local profile="${1:-}" expected_role
-
-    case "$profile" in
-        storage) expected_role=StorageWorkgroupRW ;;
-        sensitive) expected_role=HighlySensitiveSEAADStorageRW ;;
-        *)
-            echo "Usage: aws-setup storage|sensitive" >&2
-            return 2
-            ;;
-    esac
-
-    if ! command -v aws &>/dev/null; then
-        echo "Error: AWS CLI is not installed" >&2
-        return 127
-    fi
-
-    echo "Choose the $expected_role permission set in the AWS SSO wizard."
-    command aws configure sso --profile "$profile" || return
-    aws-login "$profile"
 }
 
 # Select the StorageWorkgroupRW role-backed profile.

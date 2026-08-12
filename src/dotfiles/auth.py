@@ -194,7 +194,8 @@ def check_aws() -> AuthStatus:
             if sso_session:
                 return AuthStatus(
                     "AWS", False,
-                    f"SSO configured but not logged in — run: aws sso login --sso-session {sso_session}",
+                    "SSO configured but not logged in — run: "
+                    f"aws sso login --use-device-code --sso-session {sso_session}",
                     required=False,
                 )
             hint = result.stderr.strip()[:120] if result.stderr else "no credentials"

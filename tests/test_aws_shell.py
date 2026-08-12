@@ -83,7 +83,9 @@ printf 'ACCESS_KEY=%s\\n' "${AWS_ACCESS_KEY_ID-unset}"
     assert result.returncode == 0, result.stderr
     assert "PROFILE=sensitive" in result.stdout
     assert "ACCESS_KEY=unset" in result.stdout
-    assert log_file.read_text().strip() == "sso login --profile sensitive"
+    assert log_file.read_text().strip() == (
+        "sso login --use-device-code --profile sensitive"
+    )
 
 
 def test_storage_reuses_valid_session(tmp_path: Path) -> None:
