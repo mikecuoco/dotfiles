@@ -17,8 +17,3 @@ alias brew_update="brew -v update; brew upgrade --force-bottle; brew cleanup; br
 
 # ── Tab completion for macOS defaults ─────────────────────────────────────────
 complete -W "NSGlobalDomain" defaults
-
-# ── AWS SSO (browser-based login; macOS only) ─────────────────────────────────
-alias aws-login='aws sso login --sso-session allen'
-alias aws-storage='AWS_PROFILE=storage aws'
-alias aws-sensitive='AWS_PROFILE=sensitive aws'
