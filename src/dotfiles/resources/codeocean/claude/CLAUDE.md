@@ -13,15 +13,15 @@ Extends the global CLAUDE.md for work inside a Code Ocean capsule.
 
 Root filesystem is ~5 GB and fills especially quickly on GPU machines. Put all temporary
 files, caches, build directories, environments, user installations, models, and compiled
-GPU artifacts in dedicated `/scratch` subdirectories; finals go to `/results`.
+GPU artifacts under `/scratch/.dotfiles/`; finals go to `/results`.
 Never use root-backed `/tmp`, `~/.cache`, `~/.local`, `~/.conda`, or `.venv` defaults.
 Run `ulimit -c 0` at session start and monitor root usage during installation-heavy work.
 
 ## Environment
 
 Keep dependency recipes and locks in `environment/`. Put actual Conda/virtual environments
-and interactive installations under `/scratch/envs/`; recreate them deterministically from
-their lock rather than relying on persistent scratch state.
+and interactive installations under `/scratch/.dotfiles/envs/`; recreate them deterministically
+from their lock rather than relying on persistent scratch state.
 
 Redirect caches to `/scratch` at runtime — do **not** use Dockerfile `ENV` (`/scratch` is
 empty at build time, so ENV breaks `postInstall` hardlinks and `pip install -e`).
@@ -29,17 +29,18 @@ Use a `/etc/profile.d/*.sh` script guarded by `if [ -d /scratch ]`, also sourced
 `/etc/bash.bashrc` for interactive terminals:
 
 ```bash
-export CONDA_PKGS_DIRS=/scratch/cache/conda-pkgs
-export MAMBA_PKGS_DIRS=/scratch/cache/conda-pkgs
-export PIP_CACHE_DIR=/scratch/cache/pip
-export XDG_CACHE_HOME=/scratch/cache
-export CONDA_ENVS_PATH=/scratch/envs/conda
-export UV_CACHE_DIR=/scratch/cache/uv
-export HF_HOME=/scratch/cache/huggingface
-export TORCH_HOME=/scratch/cache/torch
-export CUDA_CACHE_PATH=/scratch/cache/cuda
-export TRITON_CACHE_DIR=/scratch/cache/triton
-export TMPDIR=/scratch/tmp
+scratch_tools=/scratch/.dotfiles
+export CONDA_PKGS_DIRS="$scratch_tools/cache/conda-pkgs"
+export MAMBA_PKGS_DIRS="$CONDA_PKGS_DIRS"
+export PIP_CACHE_DIR="$scratch_tools/cache/pip"
+export XDG_CACHE_HOME="$scratch_tools/cache"
+export CONDA_ENVS_PATH="$scratch_tools/envs/conda"
+export UV_CACHE_DIR="$scratch_tools/cache/uv"
+export HF_HOME="$scratch_tools/cache/huggingface"
+export TORCH_HOME="$scratch_tools/cache/torch"
+export CUDA_CACHE_PATH="$scratch_tools/cache/cuda"
+export TRITON_CACHE_DIR="$scratch_tools/cache/triton"
+export TMPDIR="$scratch_tools/tmp"
 ```
 
 ## Reproducibility

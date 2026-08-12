@@ -93,9 +93,19 @@ def test_codeocean_runtime_storage_points_to_scratch():
         "JAX_COMPILATION_CACHE_DIR",
         "R_LIBS_USER",
     )
-    assert "_dotfiles_scratch=\"/scratch\"" in text
+    assert "_dotfiles_scratch=\"/scratch/.dotfiles\"" in text
     for variable in required:
         assert f"export {variable}=" in text, f"{variable} is not redirected"
+
+
+def test_codeocean_only_eagerly_creates_required_temp_directory():
+    """Starting a shell creates only the nested temp directory tools require."""
+    mkdir_lines = [
+        line.strip()
+        for line in CODEOCEAN_EXPORTS.read_text().splitlines()
+        if line.strip().startswith("mkdir ")
+    ]
+    assert mkdir_lines == ['mkdir -p "$TMPDIR"']
 
 
 def test_shared_claude_settings_are_minimal_and_secret_safe():

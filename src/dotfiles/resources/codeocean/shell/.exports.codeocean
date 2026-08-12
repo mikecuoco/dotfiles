@@ -10,9 +10,10 @@ if [ -d /var/run/secrets/kubernetes.io ] || [ -n "$CODEOCEAN_ENV" ]; then
 fi
 
 # The root filesystem is only ~5 GB. Keep all runtime temp files, caches,
-# environments, and user installations on the larger /scratch volume.
+# environments, and user installations on the larger /scratch volume, grouped
+# beneath one hidden directory so they do not clutter analysis workspaces.
 if [ -d /scratch ]; then
-    _dotfiles_scratch="/scratch"
+    _dotfiles_scratch="/scratch/.dotfiles"
 
     export TMPDIR="${_dotfiles_scratch}/tmp"
     export TMP="$TMPDIR"
@@ -79,61 +80,10 @@ if [ -d /scratch ]; then
     export SINGULARITY_CACHEDIR="$APPTAINER_CACHEDIR"
     export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
 
-    mkdir -p \
-        "$TMPDIR" \
-        "${_dotfiles_scratch}/build" \
-        "$XDG_CACHE_HOME" \
-        "$XDG_DATA_HOME" \
-        "$XDG_STATE_HOME" \
-        "$CONDA_PKGS_DIRS" \
-        "$CONDA_ENVS_PATH" \
-        "$MAMBA_ROOT_PREFIX" \
-        "$PYTHONUSERBASE" \
-        "$PYTHONPYCACHEPREFIX" \
-        "$VIRTUALENV_OVERRIDE_APP_DATA" \
-        "$PRE_COMMIT_HOME" \
-        "$UV_TOOL_DIR" \
-        "$UV_TOOL_BIN_DIR" \
-        "$PIPX_HOME" \
-        "$POETRY_CACHE_DIR" \
-        "$POETRY_DATA_DIR" \
-        "$POETRY_VIRTUALENVS_PATH" \
-        "$WORKON_HOME" \
-        "$NPM_CONFIG_CACHE" \
-        "$NPM_CONFIG_PREFIX" \
-        "$COREPACK_HOME" \
-        "$PNPM_HOME" \
-        "$BUN_INSTALL" \
-        "$CARGO_HOME" \
-        "$RUSTUP_HOME" \
-        "$GOPATH" \
-        "$GOBIN" \
-        "$GOCACHE" \
-        "$GOMODCACHE" \
-        "$JULIA_DEPOT_PATH" \
-        "$RENV_PATHS_CACHE" \
-        "$CCACHE_DIR" \
-        "$HF_HOME" \
-        "$TORCH_HOME" \
-        "$TORCH_EXTENSIONS_DIR" \
-        "$CUDA_CACHE_PATH" \
-        "$TRITON_CACHE_DIR" \
-        "$JAX_COMPILATION_CACHE_DIR" \
-        "$NUMBA_CACHE_DIR" \
-        "$CUPY_CACHE_DIR" \
-        "$KERAS_HOME" \
-        "$IPYTHONDIR" \
-        "$JUPYTER_RUNTIME_DIR" \
-        "$JUPYTER_DATA_DIR" \
-        "$R_LIBS_USER" \
-        "$DASK_TEMPORARY_DIRECTORY" \
-        "$JOBLIB_TEMP_FOLDER" \
-        "$RAY_TMPDIR" \
-        "$WANDB_DIR" \
-        "$WANDB_CACHE_DIR" \
-        "$WANDB_ARTIFACT_DIR" \
-        "$APPTAINER_CACHEDIR" \
-        "$APPTAINER_TMPDIR"
+    # TMPDIR must already exist for programs such as mktemp. Other tools create
+    # their cache, data, environment, and installation directories on first use;
+    # avoid littering /scratch merely by starting a shell.
+    mkdir -p "$TMPDIR"
 
     for _dotfiles_bin in \
         "$UV_TOOL_BIN_DIR" \
