@@ -40,13 +40,15 @@ links = [
   { src = "macos/shell/.exports.macos",                     dst = ".exports.macos" },
   { src = "macos/shell/.functions.macos",                   dst = ".functions.macos" },
   { src = "macos/conda/.conda_build_config.yaml",           dst = ".conda_build_config.yaml" },
+  { src = "common/matplotlib/stylelib",                      dst = ".matplotlib/stylelib" },
 ]
 
 [profiles.linux]
 description = "Generic Linux workstation or server"
 inherits = ["common"]
 links = [
-  { src = "linux/shell/.exports.linux", dst = ".exports.linux" },
+  { src = "linux/shell/.exports.linux",       dst = ".exports.linux" },
+  { src = "common/matplotlib/stylelib",       dst = ".config/matplotlib/stylelib" },
 ]
 
 [profiles.cluster]

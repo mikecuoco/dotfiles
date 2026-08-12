@@ -42,6 +42,14 @@ def test_macos_inherits_common(profiles):
     # plus its own overlays
     assert ".aliases.macos" in macos_links
     assert ".exports.macos" in macos_links
+    assert ".matplotlib/stylelib" in macos_links
+
+
+def test_linux_profiles_install_matplotlib_styles(profiles):
+    for name in ("linux", "cluster", "codeocean", "codespace"):
+        links = {link.dst: link for link in resolve_links(name, profiles)}
+        stylelib = links[".config/matplotlib/stylelib"]
+        assert stylelib.src == "common/matplotlib/stylelib"
 
 
 def test_cluster_inherits_linux_and_common(profiles):

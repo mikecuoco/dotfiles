@@ -64,7 +64,6 @@ if [ -d /scratch ]; then
     export NUMBA_CACHE_DIR="${_dotfiles_scratch}/cache/numba"
     export CUPY_CACHE_DIR="${_dotfiles_scratch}/cache/cupy"
     export KERAS_HOME="${_dotfiles_scratch}/cache/keras"
-    export MPLCONFIGDIR="${_dotfiles_scratch}/cache/matplotlib"
     export IPYTHONDIR="${_dotfiles_scratch}/cache/ipython"
     export JUPYTER_RUNTIME_DIR="${_dotfiles_scratch}/runtime/jupyter"
     export JUPYTER_DATA_DIR="${_dotfiles_scratch}/xdg/data/jupyter"
@@ -123,7 +122,6 @@ if [ -d /scratch ]; then
         "$NUMBA_CACHE_DIR" \
         "$CUPY_CACHE_DIR" \
         "$KERAS_HOME" \
-        "$MPLCONFIGDIR" \
         "$IPYTHONDIR" \
         "$JUPYTER_RUNTIME_DIR" \
         "$JUPYTER_DATA_DIR" \

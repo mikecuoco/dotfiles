@@ -1,0 +1,20 @@
+# 16:9 presentation figure default.
+
+figure.figsize: 10, 5.625
+figure.dpi: 120
+figure.titlesize: 24
+
+font.size: 18
+axes.titlesize: 24
+axes.labelsize: 20
+xtick.labelsize: 16
+ytick.labelsize: 16
+legend.fontsize: 16
+legend.title_fontsize: 18
+
+axes.linewidth: 1.5
+lines.linewidth: 2.5
+lines.markersize: 7
+
+savefig.format: png
+savefig.dpi: 200

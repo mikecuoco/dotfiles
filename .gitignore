@@ -13,6 +13,9 @@ build/
 .coverage
 htmlcov/
 
+# Jupyter executed notebooks
+*.out.ipynb
+
 # Node (legacy ESLint setup, no longer used)
 node_modules/
 package-lock.json
