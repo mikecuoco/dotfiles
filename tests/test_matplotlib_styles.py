@@ -23,6 +23,15 @@ def _style_keys(path: Path) -> list[str]:
     ]
 
 
+def _style_values(path: Path) -> dict[str, str]:
+    return {
+        key.strip(): value.strip()
+        for line in path.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+        for key, value in [line.split(":", 1)]
+    }
+
+
 def test_all_matplotlib_styles_exist():
     assert {path.name for path in STYLE_DIR.glob("*.mplstyle")} == STYLE_NAMES
 
@@ -65,12 +74,7 @@ def test_context_styles_own_sizes_and_export_settings():
 
 
 def test_manuscript_style_matches_nature_defaults():
-    values = {
-        key.strip(): value.strip()
-        for line in (STYLE_DIR / "cuoco-manuscript.mplstyle").read_text().splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-        for key, value in [line.split(":", 1)]
-    }
+    values = _style_values(STYLE_DIR / "cuoco-manuscript.mplstyle")
 
     assert values["figure.figsize"].split(",", 1)[0].strip() == "3.5039"
     assert 5 <= float(values["font.size"]) <= 7
@@ -80,6 +84,20 @@ def test_manuscript_style_matches_nature_defaults():
     assert 0.25 <= float(values["lines.linewidth"]) <= 1
     assert values["savefig.format"] == "pdf"
     assert values["savefig.dpi"] == "300"
+
+
+def test_presentation_style_has_balanced_hierarchy():
+    base = _style_values(STYLE_DIR / "cuoco-base.mplstyle")
+    values = _style_values(STYLE_DIR / "cuoco-presentation.mplstyle")
+
+    width, height = (float(part.strip()) for part in values["figure.figsize"].split(","))
+    assert width / height == pytest.approx(16 / 9)
+    assert float(values["figure.titlesize"]) > float(values["axes.titlesize"])
+    assert float(values["axes.titlesize"]) > float(values["axes.labelsize"])
+    assert float(values["axes.labelsize"]) > float(values["xtick.labelsize"])
+    assert float(values["xtick.labelsize"]) >= float(values["legend.fontsize"])
+    assert base["figure.constrained_layout.use"] == "True"
+    assert base["savefig.bbox"] == "standard"
 
 
 def test_styles_parse_when_matplotlib_is_available():

@@ -24,10 +24,11 @@ legend.frameon: False
 
 figure.facecolor: white
 axes.facecolor: white
+figure.constrained_layout.use: True
 savefig.facecolor: white
 savefig.edgecolor: white
 savefig.transparent: False
-savefig.bbox: tight
+savefig.bbox: standard
 savefig.pad_inches: 0.05
 
 pdf.fonttype: 42
