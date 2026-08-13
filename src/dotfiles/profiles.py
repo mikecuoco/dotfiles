@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-VALID_MODES = frozenset({"link", "append", "merge-json"})
+VALID_MODES = frozenset({"link", "append", "merge-json", "merge-toml"})
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,8 @@ class LinkSpec:
                  all append entries are collected in order after the base.
       "merge-json" — recursively merge the source object into a mutable JSON
                      destination without replacing unrelated keys.
+      "merge-toml" — merge a managed TOML preference block into a mutable
+                     destination without replacing unrelated app state.
     """
     src: str         # relative to resources/
     dst: str         # relative to $HOME
@@ -91,17 +93,17 @@ def resolve_links(profile_name: str, profiles: dict[str, Profile]) -> list[LinkS
 
     # "link" mode: deduplicate by dst — last occurrence (child) wins.
     # "append" mode: stack after the base link in declaration order.
-    # "merge-json" mode: mutate a standalone JSON destination and must be unique.
+    # Merge modes mutate standalone config files and must be unique per dst.
     base: dict[str, LinkSpec] = {}
     appends: list[LinkSpec] = []
     merges: dict[str, LinkSpec] = {}
     for lnk in all_links:
         if lnk.mode == "append":
             appends.append(lnk)
-        elif lnk.mode == "merge-json":
+        elif lnk.mode in {"merge-json", "merge-toml"}:
             if lnk.dst in merges:
                 raise ValueError(
-                    f"Profile '{profile_name}': duplicate merge-json destination "
+                    f"Profile '{profile_name}': duplicate merge destination "
                     f"{lnk.dst!r}"
                 )
             merges[lnk.dst] = lnk
@@ -119,7 +121,7 @@ def resolve_links(profile_name: str, profiles: dict[str, Profile]) -> list[LinkS
     merge_conflicts = sorted(set(merges) & (set(base) | {item.dst for item in appends}))
     if merge_conflicts:
         raise ValueError(
-            f"Profile '{profile_name}': merge-json destination(s) also use link/append: "
+            f"Profile '{profile_name}': merge destination(s) also use link/append: "
             f"{', '.join(merge_conflicts)}"
         )
 

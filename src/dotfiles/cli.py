@@ -75,10 +75,14 @@ def main() -> None:
         help="List available profiles",
     )
 
-    # ── claude-stats ─────────────────────────────────────────────────────────
+    # ── agent-stats / claude-stats ──────────────────────────────────────────
+    sub.add_parser(
+        "agent-stats",
+        help="Report Claude and Codex instruction context budgets",
+    )
     sub.add_parser(
         "claude-stats",
-        help="Report Claude context budget (lines, words, estimated tokens per CLAUDE.md)",
+        help="Alias for agent-stats",
     )
 
     # ── skills ───────────────────────────────────────────────────────────────
@@ -184,9 +188,9 @@ def main() -> None:
         case "profiles":
             _list_profiles()
 
-        case "claude-stats":
-            from .claude_stats import run_claude_stats
-            sys.exit(run_claude_stats())
+        case "agent-stats" | "claude-stats":
+            from .claude_stats import run_agent_stats
+            sys.exit(run_agent_stats())
 
         case "skills":
             from pathlib import Path

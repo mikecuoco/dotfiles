@@ -1,4 +1,4 @@
-"""Tests for Claude context budget invariants.
+"""Tests for shared Claude and Codex context budget invariants.
 
 These tests enforce structural properties, not exact prose.  They are
 intentionally tolerant of wording changes but strict about:
@@ -11,26 +11,27 @@ intentionally tolerant of wording changes but strict about:
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
+import tomllib
 
 import pytest
 
 from dotfiles import RESOURCES_DIR
 from dotfiles.claude_stats import estimate_tokens, GLOBAL_BUDGET, OVERLAY_BUDGET
-from dotfiles.profiles import load_profiles, resolve_links
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-GLOBAL_MD = RESOURCES_DIR / "common" / "claude" / "CLAUDE.md"
-CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "claude" / "CLAUDE.md"
+SHARED_MD = RESOURCES_DIR / "common" / "agents" / "PREFERENCES.md"
+CLAUDE_MD = RESOURCES_DIR / "common" / "claude" / "CLAUDE.md"
+CODEX_MD = RESOURCES_DIR / "common" / "codex" / "AGENTS.md"
+CODEX_SETTINGS = RESOURCES_DIR / "common" / "codex" / "preferences.toml"
+CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "agents" / "PREFERENCES.md"
 CODEOCEAN_EXPORTS = RESOURCES_DIR / "codeocean" / "shell" / ".exports.codeocean"
 CLAUDE_SETTINGS = RESOURCES_DIR / "common" / "claude" / "settings.json"
 CODEOCEAN_GLOBAL = RESOURCES_DIR / "codeocean" / "claude" / "global.json"
 
 
 def _global_text() -> str:
-    return GLOBAL_MD.read_text()
+    return SHARED_MD.read_text()
 
 
 def _codeocean_text() -> str:
@@ -39,12 +40,14 @@ def _codeocean_text() -> str:
 
 # ── budget tests ──────────────────────────────────────────────────────────────
 
-def test_global_claude_within_budget():
-    """Global CLAUDE.md must stay within the token budget."""
-    tokens = estimate_tokens(_global_text())
+@pytest.mark.parametrize("supplement", [CLAUDE_MD, CODEX_MD])
+def test_global_agent_instructions_within_budget(supplement):
+    """Each generated global instruction file must stay within budget."""
+    text = _global_text() + "\n\n" + supplement.read_text()
+    tokens = estimate_tokens(text)
     assert tokens <= GLOBAL_BUDGET, (
-        f"Global CLAUDE.md is {tokens} estimated tokens (budget: {GLOBAL_BUDGET}). "
-        "Trim it or raise the budget intentionally."
+        f"Global instructions are {tokens} estimated tokens "
+        f"(budget: {GLOBAL_BUDGET}). Trim them or raise the budget intentionally."
     )
 
 
@@ -52,7 +55,8 @@ def test_codeocean_overlay_within_budget():
     """Code Ocean overlay must stay within the overlay token budget."""
     tokens = estimate_tokens(_codeocean_text())
     assert tokens <= OVERLAY_BUDGET, (
-        f"codeocean CLAUDE.md overlay is {tokens} estimated tokens (budget: {OVERLAY_BUDGET}). "
+        f"Code Ocean agent overlay is {tokens} estimated tokens "
+        f"(budget: {OVERLAY_BUDGET}). "
         "Trim it or raise the budget intentionally."
     )
 
@@ -127,6 +131,26 @@ def test_shared_claude_settings_are_minimal_and_secret_safe():
     } <= denied
 
 
+def test_shared_codex_settings_define_secret_safe_workspace_profile():
+    settings = tomllib.loads(CODEX_SETTINGS.read_text())
+
+    assert settings["default_permissions"] == "dotfiles"
+    profile = settings["permissions"]["dotfiles"]
+    assert profile["extends"] == ":workspace"
+    filesystem = profile["filesystem"]
+    workspace = filesystem[":workspace_roots"]
+    assert {
+        "**/.env",
+        "**/.env.*",
+        "**/secrets/**",
+        "**/.codex/auth.json",
+    } <= {path for path, access in workspace.items() if access == "deny"}
+    assert filesystem["/Users/*/.aws/credentials"] == "deny"
+    assert filesystem["/home/*/.aws/credentials"] == "deny"
+    assert filesystem["/root/.aws/credentials"] == "deny"
+    assert filesystem["/Users/*/.codex/auth.json"] == "deny"
+
+
 def test_codeocean_global_defaults_only_skip_onboarding():
     assert json.loads(CODEOCEAN_GLOBAL.read_text()) == {
         "hasCompletedOnboarding": True,
@@ -136,60 +160,62 @@ def test_codeocean_global_defaults_only_skip_onboarding():
 # ── content-isolation tests ───────────────────────────────────────────────────
 
 def test_no_scratch_in_global():
-    """/scratch is a Code Ocean-specific path; must not appear in global CLAUDE.md."""
+    """/scratch is Code Ocean-specific and must not appear globally."""
     assert "/scratch" not in _global_text(), (
-        "Global CLAUDE.md contains '/scratch', which is Code Ocean-specific. "
+        "Shared preferences contain '/scratch', which is Code Ocean-specific. "
         "Move it to the codeocean overlay."
     )
 
 
 def test_no_cfg_memory_path_in_global():
-    """The brittle /cfg/projects harness path must not appear in global CLAUDE.md."""
+    """The brittle /cfg/projects harness path must not appear globally."""
     assert "/cfg/projects" not in _global_text(), (
-        "Global CLAUDE.md references '/cfg/projects', a platform-specific memory path. "
+        "Shared preferences reference '/cfg/projects', a platform-specific memory path. "
         "Replace with portable memory policy guidance."
     )
 
 
 def test_no_codeocean_text_in_global():
-    """Code Ocean-specific content must not appear in the global resource."""
+    """Code Ocean-specific content must not appear in shared preferences."""
     text = _global_text()
     assert "Code Ocean" not in text, (
-        "Global CLAUDE.md contains 'Code Ocean' text. "
+        "Shared preferences contain 'Code Ocean' text. "
         "Move it to the codeocean overlay."
     )
     assert "codeocean" not in text.lower(), (
-        "Global CLAUDE.md references 'codeocean'. "
+        "Shared preferences reference 'codeocean'. "
         "Move it to the codeocean overlay."
     )
 
 
 # ── composition test ──────────────────────────────────────────────────────────
 
-def test_codeocean_effective_context_contains_both(tmp_path):
-    """The generated codeocean CLAUDE.md should contain content from both sources."""
+def test_codeocean_effective_context_contains_shared_and_specific_layers(tmp_path):
+    """Both agents receive shared, agent-specific, and Code Ocean guidance."""
     from dotfiles.install import run_install
 
     ok = run_install(profile="codeocean", dry_run=False, home=tmp_path)
     assert ok is True
 
-    generated = tmp_path / ".claude" / "CLAUDE.md"
-    assert generated.exists()
-    assert not generated.is_symlink(), "codeocean CLAUDE.md should be a generated file, not a symlink"
-
-    content = generated.read_text()
-    # Global content: check for a distinctive phrase from the new global file
-    assert "Working style" in content, "Generated file missing global 'Working style' section"
-    # Overlay content: check for Code Ocean layout
-    assert "Code Ocean" in content, "Generated file missing Code Ocean overlay content"
-    assert "/scratch" in content, "Generated file missing /scratch reference from overlay"
+    expected = {
+        tmp_path / ".claude" / "CLAUDE.md": "Claude delegation",
+        tmp_path / ".codex" / "AGENTS.md": "Codex delegation",
+    }
+    for generated, agent_heading in expected.items():
+        assert generated.exists()
+        assert not generated.is_symlink()
+        content = generated.read_text()
+        assert "Working style" in content
+        assert agent_heading in content
+        assert "Code Ocean" in content
+        assert "/scratch" in content
 
 
 # ── determinism test ─────────────────────────────────────────────────────────
 
 def test_estimate_tokens_deterministic():
     """Token estimation must be purely deterministic."""
-    sample = "This is a sample Claude instruction with some technical words."
+    sample = "This is a sample agent instruction with some technical words."
     assert estimate_tokens(sample) == estimate_tokens(sample)
     assert estimate_tokens(sample) == estimate_tokens(sample)
 
@@ -221,34 +247,38 @@ def test_estimate_tokens_no_external_calls(monkeypatch):
 
 # ── idempotency test ─────────────────────────────────────────────────────────
 
-def test_codeocean_claude_md_idempotent(tmp_path):
-    """Re-installing codeocean profile should not change the generated CLAUDE.md."""
+@pytest.mark.parametrize("relative", [".claude/CLAUDE.md", ".codex/AGENTS.md"])
+def test_codeocean_agent_instructions_idempotent(tmp_path, relative):
+    """Re-installing Code Ocean does not rewrite generated instructions."""
     from dotfiles.install import run_install
 
     run_install(profile="codeocean", dry_run=False, home=tmp_path)
-    first = (tmp_path / ".claude" / "CLAUDE.md").read_text()
+    generated = tmp_path / relative
+    first = generated.read_text()
+    first_mtime = generated.stat().st_mtime_ns
 
     run_install(profile="codeocean", dry_run=False, home=tmp_path)
-    second = (tmp_path / ".claude" / "CLAUDE.md").read_text()
+    second = generated.read_text()
 
-    assert first == second, "Re-installing codeocean produced a different CLAUDE.md"
+    assert first == second
+    assert generated.stat().st_mtime_ns == first_mtime
 
 
-def test_non_overlay_profile_uses_symlink(tmp_path):
-    """Profiles without a CLAUDE.md overlay should install a symlink to common."""
+def test_non_overlay_profile_generates_both_agent_instruction_files(tmp_path):
+    """Common agent-specific supplements are composed for both tools."""
     from dotfiles.install import run_install
 
-    # linux inherits common but has no overlay
     run_install(profile="linux", dry_run=False, home=tmp_path)
-    claude_md = tmp_path / ".claude" / "CLAUDE.md"
-    assert claude_md.exists()
-    assert claude_md.is_symlink(), "Non-overlay profiles should install CLAUDE.md as a symlink"
+    for relative in (".claude/CLAUDE.md", ".codex/AGENTS.md"):
+        generated = tmp_path / relative
+        assert generated.exists()
+        assert not generated.is_symlink()
 
 
-# ── claude-stats output test ─────────────────────────────────────────────────
+# ── agent-stats output test ──────────────────────────────────────────────────
 
-def test_claude_stats_output_contains_no_secret_values(capsys):
-    """claude-stats must never print secret/credential values."""
+def test_agent_stats_output_contains_no_secret_values(capsys):
+    """The compatibility command must never print secret values."""
     import os
     from dotfiles.claude_stats import run_claude_stats
 

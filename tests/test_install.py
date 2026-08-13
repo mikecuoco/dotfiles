@@ -1,6 +1,7 @@
 """Tests for the safe, idempotent installer."""
 import json
 import os
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -121,11 +122,12 @@ def test_install_invalid_profile(fake_home, capsys):
     assert "Unknown profile" in captured.err or "Unknown profile" in captured.out
 
 
-def test_claude_config_directory_created(fake_home):
+def test_agent_config_directories_created(fake_home):
     run_install(profile="codespace", dry_run=False, home=fake_home)
-    claude_md = fake_home / ".claude" / "CLAUDE.md"
-    assert claude_md.is_symlink()
-    assert claude_md.exists()
+    for relative in (".claude/CLAUDE.md", ".codex/AGENTS.md"):
+        instructions = fake_home / relative
+        assert instructions.exists()
+        assert not instructions.is_symlink()
 
 
 def test_dry_run_does_not_write_state(fake_home):
@@ -155,9 +157,9 @@ def test_generated_file_updated_without_backup(fake_home, tmp_path):
     """If a source file changes, the generated file is replaced cleanly — no backup."""
     run_install(profile="codeocean", dry_run=False, home=fake_home)
 
-    # Patch the codeocean CLAUDE.md source to simulate an upstream edit
+    # Patch the shared Code Ocean source to simulate an upstream edit
     from dotfiles.install import get_resources_dir
-    co_src = get_resources_dir() / "codeocean" / "claude" / "CLAUDE.md"
+    co_src = get_resources_dir() / "codeocean" / "agents" / "PREFERENCES.md"
     original = co_src.read_text()
     try:
         co_src.write_text(original + "\n\n<!-- test patch -->")
@@ -170,6 +172,8 @@ def test_generated_file_updated_without_backup(fake_home, tmp_path):
 
     claude_md = fake_home / ".claude" / "CLAUDE.md"
     assert "<!-- test patch -->" in claude_md.read_text()
+    codex_md = fake_home / ".codex" / "AGENTS.md"
+    assert "<!-- test patch -->" in codex_md.read_text()
 
 
 def test_codeocean_merges_onboarding_without_replacing_claude_state(fake_home):
@@ -239,3 +243,94 @@ def test_codeocean_json_merge_refuses_symlink_destination(fake_home):
 
     assert ok is False
     assert json.loads(target.read_text()) == {"untouched": True}
+
+
+def test_codex_toml_merge_preserves_app_managed_state(fake_home):
+    config = fake_home / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    original = (
+        'notify = ["/Applications/Codex Notifier", "turn-ended"]\n'
+        'model = "gpt-5.6-sol"\n'
+        '\n'
+        '[plugins."browser@openai-bundled"]\n'
+        'enabled = true\n'
+        '\n'
+        '[projects."/work/example"]\n'
+        'trust_level = "trusted"\n'
+    )
+    config.write_text(original)
+
+    ok = run_install(profile="linux", dry_run=False, home=fake_home)
+
+    assert ok is True
+    merged = tomllib.loads(config.read_text())
+    assert merged["notify"] == ["/Applications/Codex Notifier", "turn-ended"]
+    assert merged["model"] == "gpt-5.6-sol"
+    assert merged["plugins"]["browser@openai-bundled"]["enabled"] is True
+    assert merged["projects"]["/work/example"]["trust_level"] == "trusted"
+    assert merged["default_permissions"] == "dotfiles"
+    assert merged["permissions"]["dotfiles"]["extends"] == ":workspace"
+    assert not config.is_symlink()
+
+
+def test_codex_toml_merge_is_idempotent(fake_home):
+    run_install(profile="linux", dry_run=False, home=fake_home)
+    config = fake_home / ".codex" / "config.toml"
+    first = config.read_bytes()
+    first_mtime = config.stat().st_mtime_ns
+
+    run_install(profile="linux", dry_run=False, home=fake_home)
+
+    assert config.read_bytes() == first
+    assert config.stat().st_mtime_ns == first_mtime
+    assert config.read_text().count("dotfiles managed Codex preferences >>>") == 1
+
+
+def test_codex_toml_merge_creates_private_file(fake_home):
+    run_install(profile="linux", dry_run=False, home=fake_home)
+    config = fake_home / ".codex" / "config.toml"
+
+    assert tomllib.loads(config.read_text())["default_permissions"] == "dotfiles"
+    assert config.stat().st_mode & 0o777 == 0o600
+
+
+def test_codex_toml_merge_dry_run_writes_nothing(fake_home):
+    ok = run_install(profile="linux", dry_run=True, home=fake_home)
+
+    assert ok is True
+    assert not (fake_home / ".codex" / "config.toml").exists()
+
+
+def test_codex_toml_merge_refuses_invalid_existing_state(fake_home):
+    config = fake_home / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text("not valid = [toml\n")
+
+    ok = run_install(profile="linux", dry_run=False, home=fake_home)
+
+    assert ok is False
+    assert config.read_text() == "not valid = [toml\n"
+
+
+def test_codex_toml_merge_refuses_unmanaged_key_collision(fake_home):
+    config = fake_home / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text('default_permissions = ":read-only"\n')
+
+    ok = run_install(profile="linux", dry_run=False, home=fake_home)
+
+    assert ok is False
+    assert config.read_text() == 'default_permissions = ":read-only"\n'
+
+
+def test_codex_toml_merge_refuses_symlink_destination(fake_home):
+    target = fake_home / "elsewhere.toml"
+    target.write_text('model = "preserve-me"\n')
+    config = fake_home / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.symlink_to(target)
+
+    ok = run_install(profile="linux", dry_run=False, home=fake_home)
+
+    assert ok is False
+    assert tomllib.loads(target.read_text()) == {"model": "preserve-me"}

@@ -30,6 +30,7 @@ dotfiles doctor    [--json]
 dotfiles status
 dotfiles auth
 dotfiles profiles
+dotfiles agent-stats
 dotfiles skills     install|update|status [--with GROUP]
 ```
 
@@ -40,6 +41,7 @@ dotfiles skills     install|update|status [--with GROUP]
 | `status` | Show what's currently installed and which profile is active |
 | `auth` | Report authentication status (Anthropic, GitHub, AWS, Mem0) |
 | `profiles` | List all available profiles with descriptions |
+| `agent-stats` | Report generated Claude and Codex instruction-context budgets |
 | `skills` | Install bundled first-party and selected GPTomics skills for Claude Code |
 
 ## Profiles
@@ -77,6 +79,12 @@ The active profile is **auto-detected** at install time (override with `--profil
 | Conda | `.condarc` |
 | Misc | `.dircolors`, `.gemrc`, `.hushlogin` |
 | Claude Code | `.claude/CLAUDE.md`, `.claude/settings.json` |
+| Codex | `.codex/AGENTS.md`, portable safety defaults merged into `.codex/config.toml` |
+
+Claude and Codex share one canonical preference source. Their installed
+instruction files add only a small tool-specific delegation supplement, so
+working style, engineering, notebook, memory, and safety preferences cannot
+silently drift. See [Agent context architecture](docs/agent-context.md).
 
 ### Plugin and MCP server setup
 
@@ -236,12 +244,15 @@ Each profile adds files alongside the common ones. Shell overlays (`.exports.<pr
 | `macos` | `.aliases.macos`, `.exports.macos`, `.functions.macos`, `.conda_build_config.yaml` |
 | `linux` | `.exports.linux` |
 | `cluster` | `.exports.cluster`, `.functions.cluster`, `.Rprofile` |
-| `codeocean` | `.exports.codeocean`, `.claude/CLAUDE.md` (appended), `.claude.json` defaults (merged) |
+| `codeocean` | `.exports.codeocean`, shared Code Ocean guidance appended to Claude and Codex, `.claude.json` defaults (merged) |
 | `codespace` | `.exports.codespace` |
 
 ### Profile overlays (`append` mode)
 
-A link declared with `mode = "append"` concatenates its source onto the parent's file rather than replacing it. This is used for profile-specific `CLAUDE.md` additions — the `codeocean` profile appends its own instructions to the common `CLAUDE.md` to produce a single merged file.
+A link declared with `mode = "append"` concatenates its source onto the parent's
+file rather than replacing it. The installer composes the shared preferences,
+the Claude or Codex supplement, and any environment overlay into the tool's
+global instruction file.
 
 ### Mutable JSON defaults (`merge-json` mode)
 
@@ -258,10 +269,21 @@ keeps the existing 30-day cleanup and plan-mode preferences, respects
 `.gitignore`, and denies reads of common credential files. Secrets remain in
 environment variables and are never written into Claude settings.
 
+### Mutable Codex preferences (`merge-toml` mode)
+
+Codex keeps app-generated paths, plugins, notifications, and trusted-project
+state in `~/.codex/config.toml`, so the installer never replaces that file. A
+marker-owned TOML block adds the portable `dotfiles` permission profile while
+preserving unrelated content and file permissions. The merge is atomic,
+idempotent, validates the final TOML, and refuses unmanaged key collisions.
+The profile extends Codex's `:workspace` policy and denies reads of common
+credential files, including `.env`, `secrets/**`, AWS credentials, and Codex or
+Claude authentication files.
+
 ## How it works
 
-1. **`dotfiles install`** resolves the full link list for the active profile (depth-first through `inherits`), then symlinks normal files, concatenates append overlays, and safely merges declared mutable JSON defaults.
-2. **Backup on link conflict**: if a normal link destination already exists it is renamed to `<name>.dotfiles-backup.<timestamp>` before being replaced. Mutable JSON overlays instead preserve unrelated keys and update the file atomically.
+1. **`dotfiles install`** resolves the full link list for the active profile (depth-first through `inherits`), then symlinks normal files, concatenates append overlays, and safely merges declared mutable JSON or TOML defaults.
+2. **Backup on link conflict**: if a normal link destination already exists it is renamed to `<name>.dotfiles-backup.<timestamp>` before being replaced. Mutable configuration overlays instead preserve unrelated keys and update the file atomically.
 3. **Idempotent**: re-running `install` is safe; unchanged symlinks and up-to-date generated files are skipped.
 4. **State file**: installation details are saved to `~/.config/dotfiles/state.json` so `status` and `doctor` can verify the installation without re-reading the package.
 5. **Active profile**: written to `~/.config/dotfiles/profile` and read by `.bash_profile` to source the right platform overlays at shell startup.

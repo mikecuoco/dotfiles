@@ -32,6 +32,8 @@ def test_resolve_common_links(profiles):
     assert ".bash_profile" in dsts
     assert ".gitconfig" in dsts
     assert ".claude/CLAUDE.md" in dsts
+    assert ".codex/AGENTS.md" in dsts
+    assert ".codex/config.toml" in dsts
 
 
 def test_macos_inherits_common(profiles):
@@ -77,12 +79,33 @@ def test_codeocean_claude_md_is_append(profiles):
     """codeocean profile should append its CLAUDE.md rather than overwrite common's."""
     links = resolve_links("codeocean", profiles)
     claude_links = [l for l in links if l.dst == ".claude/CLAUDE.md"]
-    # one base link from common, one append from codeocean
-    assert len(claude_links) == 2
+    # shared base, Claude supplement, then shared Code Ocean overlay
+    assert len(claude_links) == 3
     assert claude_links[0].mode == "link"
     assert claude_links[1].mode == "append"
-    assert "common" in claude_links[0].src
-    assert "codeocean" in claude_links[1].src
+    assert claude_links[2].mode == "append"
+    assert claude_links[0].src == "common/agents/PREFERENCES.md"
+    assert claude_links[1].src == "common/claude/CLAUDE.md"
+    assert claude_links[2].src == "codeocean/agents/PREFERENCES.md"
+
+
+def test_codeocean_codex_agents_is_append(profiles):
+    links = resolve_links("codeocean", profiles)
+    codex_links = [link for link in links if link.dst == ".codex/AGENTS.md"]
+
+    assert [link.mode for link in codex_links] == ["link", "append", "append"]
+    assert codex_links[0].src == "common/agents/PREFERENCES.md"
+    assert codex_links[1].src == "common/codex/AGENTS.md"
+    assert codex_links[2].src == "codeocean/agents/PREFERENCES.md"
+
+
+def test_codex_preferences_are_merged(profiles):
+    for name in profiles:
+        links = resolve_links(name, profiles)
+        config = [link for link in links if link.dst == ".codex/config.toml"]
+        assert len(config) == 1
+        assert config[0].mode == "merge-toml"
+        assert config[0].src == "common/codex/preferences.toml"
 
 
 def test_codeocean_global_claude_defaults_are_merged(profiles):
@@ -102,8 +125,7 @@ def test_global_claude_defaults_are_codeocean_only(profiles):
 
 
 def test_append_mode_concat(tmp_path):
-    """resolve_links + installer should produce a concatenated file for append-mode."""
-    import tomllib
+    """The installer should compose both agents' Code Ocean instructions."""
     from dotfiles.install import run_install
 
     ok = run_install(profile="codeocean", dry_run=False, home=tmp_path)
@@ -114,6 +136,14 @@ def test_append_mode_concat(tmp_path):
     content = claude_md.read_text()
     assert "Working style" in content       # from common global
     assert "Code Ocean" in content          # from codeocean append
+
+    codex_md = tmp_path / ".codex" / "AGENTS.md"
+    assert codex_md.exists()
+    assert not codex_md.is_symlink()
+    codex_content = codex_md.read_text()
+    assert "Working style" in codex_content
+    assert "Codex delegation" in codex_content
+    assert "Code Ocean" in codex_content
 
 
 def test_unknown_profile_raises(profiles):
@@ -151,6 +181,21 @@ def test_merge_json_cannot_share_a_link_destination(tmp_path):
         'links = ['
         '{ src = "base.json", dst = ".config.json" },'
         '{ src = "overlay.json", dst = ".config.json", mode = "merge-json" }'
+        ']\n'
+    )
+    profs = load_profiles(tmp_path)
+
+    with pytest.raises(ValueError, match="also use link/append"):
+        resolve_links("bad", profs)
+
+
+def test_merge_toml_cannot_share_a_link_destination(tmp_path):
+    toml = tmp_path / "profiles.toml"
+    toml.write_text(
+        '[profiles.bad]\ndescription = ""\ninherits = []\n'
+        'links = ['
+        '{ src = "base.toml", dst = ".config.toml" },'
+        '{ src = "overlay.toml", dst = ".config.toml", mode = "merge-toml" }'
         ']\n'
     )
     profs = load_profiles(tmp_path)

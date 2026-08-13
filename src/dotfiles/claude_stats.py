@@ -1,8 +1,9 @@
-"""Claude context budget reporter.
+"""Claude and Codex context budget reporter.
 
-Measures lines, words, and estimated tokens for each CLAUDE.md resource and
-reports per-profile effective totals.  Uses a simple word-count approximation
-(words × 4/3) — no external tokenizer required.
+Measures the generated instruction chains for both agents and reports
+per-profile effective totals. Uses a simple word-count approximation
+(words × 4/3) — no external tokenizer required. The module name and
+``run_claude_stats`` entry point remain as compatibility aliases.
 """
 from __future__ import annotations
 
@@ -50,46 +51,80 @@ def _fmt_total(label: str, tokens: int, budget: Optional[int] = None) -> str:
     return f"{label}\n  estimated tokens:  {tokens}{tag}"
 
 
-def run_claude_stats(resources_dir: Optional[Path] = None) -> int:
-    """Print a Claude context budget report.  Returns an exit code (0 = ok, 1 = over budget)."""
+def _instruction_sources(
+    resources: Path,
+    profile_name: str,
+    destination: str,
+) -> list[Path]:
+    from .profiles import load_profiles, resolve_links
+
+    profiles = load_profiles(resources)
+    return [
+        resources / link.src
+        for link in resolve_links(profile_name, profiles)
+        if link.dst == destination and link.mode in {"link", "append"}
+    ]
+
+
+def _compose(sources: list[Path]) -> str:
+    return "\n\n".join(path.read_text() for path in sources)
+
+
+def run_agent_stats(resources_dir: Optional[Path] = None) -> int:
+    """Print agent context budgets. Returns 0 when every layer is in budget."""
     from . import RESOURCES_DIR
     from .profiles import load_profiles
 
     resources = resources_dir or RESOURCES_DIR
-
-    global_path = resources / "common" / "claude" / "CLAUDE.md"
-    if not global_path.exists():
-        print(f"Error: global CLAUDE.md not found at {global_path}", file=sys.stderr)
-        return 1
-
-    global_text = global_path.read_text()
-    global_stats = _measure(global_text)
-
-    # Find all profiles that append to .claude/CLAUDE.md
     profiles = load_profiles(resources)
-    overlays: dict[str, Path] = {}
-    for name, profile in profiles.items():
-        for link in profile.links:
-            if link.dst == ".claude/CLAUDE.md" and link.mode == "append":
-                overlay_path = resources / link.src
-                if overlay_path.exists():
-                    overlays[name] = overlay_path
+    destinations = {
+        "Claude": ".claude/CLAUDE.md",
+        "Codex": ".codex/AGENTS.md",
+    }
 
-    print("Claude context budget\n")
-    print(_fmt("global CLAUDE.md", global_stats, budget=GLOBAL_BUDGET))
+    print("Agent context budget")
+    over_budget = False
+    for agent_name, destination in destinations.items():
+        common_sources = _instruction_sources(resources, "common", destination)
+        missing = [path for path in common_sources if not path.exists()]
+        if not common_sources or missing:
+            detail = missing[0] if missing else destination
+            print(f"Error: instruction source not found for {detail}", file=sys.stderr)
+            return 1
 
-    over_budget = global_stats["tokens"] > GLOBAL_BUDGET
-    for profile_name, overlay_path in sorted(overlays.items()):
-        overlay_text = overlay_path.read_text()
-        overlay_stats = _measure(overlay_text)
-        effective_tokens = estimate_tokens(global_text + "\n\n" + overlay_text)
-
+        global_text = _compose(common_sources)
+        global_stats = _measure(global_text)
         print()
-        print(_fmt(f"{profile_name} overlay", overlay_stats, budget=OVERLAY_BUDGET))
-        print()
-        print(_fmt_total(f"{profile_name} effective total", effective_tokens))
+        print(_fmt(f"{agent_name} global", global_stats, budget=GLOBAL_BUDGET))
+        over_budget = over_budget or global_stats["tokens"] > GLOBAL_BUDGET
 
-        if overlay_stats["tokens"] > OVERLAY_BUDGET:
-            over_budget = True
+        for profile_name in sorted(profiles):
+            if profile_name == "common":
+                continue
+            sources = _instruction_sources(resources, profile_name, destination)
+            overlay_sources = sources[len(common_sources):]
+            if not overlay_sources:
+                continue
+            overlay_text = _compose(overlay_sources)
+            overlay_stats = _measure(overlay_text)
+            effective_tokens = estimate_tokens(_compose(sources))
+
+            print()
+            print(_fmt(
+                f"{agent_name} {profile_name} overlay",
+                overlay_stats,
+                budget=OVERLAY_BUDGET,
+            ))
+            print()
+            print(_fmt_total(
+                f"{agent_name} {profile_name} effective total",
+                effective_tokens,
+            ))
+            over_budget = over_budget or overlay_stats["tokens"] > OVERLAY_BUDGET
 
     return 1 if over_budget else 0
+
+
+def run_claude_stats(resources_dir: Optional[Path] = None) -> int:
+    """Compatibility alias for the former Claude-only reporter."""
+    return run_agent_stats(resources_dir=resources_dir)

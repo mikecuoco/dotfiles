@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
@@ -26,7 +27,7 @@ class Result(Enum):
     UNCHANGED = auto()           # Already symlinked to the correct target
     LINKED = auto()              # New symlink created
     BACKED_UP_AND_LINKED = auto()  # Existing file backed up, then linked
-    MERGED = auto()              # JSON defaults merged into a mutable file
+    MERGED = auto()              # Defaults merged into a mutable config file
     DRY = auto()                 # Would have been linked (dry-run)
     ERROR = auto()
 
@@ -104,15 +105,15 @@ def run_install(
     existing_state = read_state(home)
     prev_generated: set[str] = set((existing_state or {}).get("generated", []))
 
-    # Group links by mode. Appends compose with a base link; JSON merges target
-    # standalone mutable files such as ~/.claude.json.
+    # Group links by mode. Appends compose with a base link; merge modes target
+    # standalone mutable config files such as ~/.claude.json and Codex config.
     base_links: dict[str, LinkSpec] = {}
     append_links: dict[str, list[LinkSpec]] = defaultdict(list)
     merge_links: list[LinkSpec] = []
     for lnk in links:
         if lnk.mode == "append":
             append_links[lnk.dst].append(lnk)
-        elif lnk.mode == "merge-json":
+        elif lnk.mode in {"merge-json", "merge-toml"}:
             merge_links.append(lnk)
         else:
             base_links[lnk.dst] = lnk
@@ -136,11 +137,8 @@ def run_install(
         _print_line(rpt, quiet=quiet)
 
     for lnk in merge_links:
-        rpt = _install_json_merge(
-            src=resources / lnk.src,
-            dst=home / lnk.dst,
-            dry_run=dry_run,
-        )
+        merge_fn = _install_json_merge if lnk.mode == "merge-json" else _install_toml_merge
+        rpt = merge_fn(src=resources / lnk.src, dst=home / lnk.dst, dry_run=dry_run)
         if rpt.result != Result.ERROR:
             merged_dsts.append(lnk.dst)
         reports.append(rpt)
@@ -371,6 +369,118 @@ def _install_json_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
         return _Report(Result.ERROR, dst, src, error=f"JSON merge failed: {exc}")
+
+    return _Report(Result.MERGED, dst, src)
+
+
+_TOML_BLOCK_START = "# >>> dotfiles managed Codex preferences >>>"
+_TOML_BLOCK_END = "# <<< dotfiles managed Codex preferences <<<"
+
+
+def _toml_conflicts(
+    destination: dict,
+    overlay: dict,
+    prefix: tuple[str, ...] = (),
+) -> list[str]:
+    """Return leaf paths that an unmanaged TOML file already defines."""
+    conflicts: list[str] = []
+    for key, value in overlay.items():
+        if key not in destination:
+            continue
+        current = destination[key]
+        path = prefix + (key,)
+        if isinstance(current, dict) and isinstance(value, dict):
+            conflicts.extend(_toml_conflicts(current, value, path))
+        else:
+            conflicts.append(".".join(path))
+    return conflicts
+
+
+def _strip_managed_toml_block(text: str) -> tuple[str, bool]:
+    """Remove the installer-owned block while preserving all other bytes."""
+    starts = text.count(_TOML_BLOCK_START)
+    ends = text.count(_TOML_BLOCK_END)
+    if starts == 0 and ends == 0:
+        return text, False
+    if starts != 1 or ends != 1:
+        raise ValueError("malformed managed preference markers")
+
+    start = text.index(_TOML_BLOCK_START)
+    end = text.index(_TOML_BLOCK_END, start) + len(_TOML_BLOCK_END)
+    if end < len(text) and text[end] == "\n":
+        end += 1
+    if end < len(text) and text[end] == "\n":
+        end += 1
+    return text[:start] + text[end:], True
+
+
+def _install_toml_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
+    """Atomically add or refresh a marker-owned TOML preference block.
+
+    The source uses root-level dotted keys, so it can be prepended without
+    changing the scope of tables already owned by the Codex app. Existing
+    unmanaged keys are never overwritten: a collision is reported instead.
+    """
+    if not src.is_file():
+        return _Report(Result.ERROR, dst, src, error=f"Source not found: {src}")
+    if dst.is_symlink():
+        return _Report(
+            Result.ERROR,
+            dst,
+            src,
+            error="refusing to merge TOML through a symlink",
+        )
+
+    try:
+        overlay_text = src.read_text(encoding="utf-8").rstrip() + "\n"
+        overlay = tomllib.loads(overlay_text)
+        if dst.exists():
+            existing_text = dst.read_text(encoding="utf-8")
+            file_mode = dst.stat().st_mode & 0o777
+        else:
+            existing_text = ""
+            file_mode = 0o600
+
+        unmanaged_text, had_managed_block = _strip_managed_toml_block(existing_text)
+        unmanaged = tomllib.loads(unmanaged_text) if unmanaged_text.strip() else {}
+        conflicts = _toml_conflicts(unmanaged, overlay)
+        if conflicts:
+            joined = ", ".join(conflicts)
+            raise ValueError(f"unmanaged destination already defines: {joined}")
+
+        managed_block = (
+            f"{_TOML_BLOCK_START}\n"
+            f"{overlay_text}"
+            f"{_TOML_BLOCK_END}\n\n"
+        )
+        merged_text = managed_block + unmanaged_text
+        tomllib.loads(merged_text)
+    except (OSError, tomllib.TOMLDecodeError, ValueError) as exc:
+        return _Report(Result.ERROR, dst, src, error=f"TOML merge failed: {exc}")
+
+    if had_managed_block and merged_text == existing_text:
+        return _Report(Result.UNCHANGED, dst, src)
+    if dry_run:
+        return _Report(Result.DRY, dst, src)
+
+    temporary: Optional[Path] = None
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=dst.parent,
+            prefix=f".{dst.name}.",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(merged_text)
+        os.chmod(temporary, file_mode)
+        os.replace(temporary, dst)
+    except OSError as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        return _Report(Result.ERROR, dst, src, error=f"TOML merge failed: {exc}")
 
     return _Report(Result.MERGED, dst, src)
 

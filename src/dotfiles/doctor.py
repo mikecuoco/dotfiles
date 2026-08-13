@@ -17,7 +17,9 @@ from .platform import PlatformInfo, detect_platform
 
 # Tools to check — split into required and optional
 _REQUIRED_TOOLS = ("git", "python3")
-_OPTIONAL_TOOLS = ("uv", "gh", "aws", "claude", "delta", "fzf", "eza", "rg", "vim")
+_OPTIONAL_TOOLS = (
+    "uv", "gh", "aws", "claude", "codex", "delta", "fzf", "eza", "rg", "vim",
+)
 
 
 @dataclass

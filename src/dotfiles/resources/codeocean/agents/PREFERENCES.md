@@ -1,6 +1,6 @@
 # Code Ocean Capsule Conventions
 
-Extends the global CLAUDE.md for work inside a Code Ocean capsule.
+Extends the global agent preferences for work inside a Code Ocean capsule.
 
 ## Layout
 

@@ -99,5 +99,9 @@ def test_doctor_accepts_generated_and_merged_codeocean_files(tmp_path, capsys):
     files = {item["path"]: item for item in report["dotfiles"]["files"]}
     assert files[".claude/CLAUDE.md"]["ok"] is True
     assert files[".claude/CLAUDE.md"]["message"] == "generated"
+    assert files[".codex/AGENTS.md"]["ok"] is True
+    assert files[".codex/AGENTS.md"]["message"] == "generated"
+    assert files[".codex/config.toml"]["ok"] is True
+    assert files[".codex/config.toml"]["message"] == "merged"
     assert files[".claude.json"]["ok"] is True
     assert files[".claude.json"]["message"] == "merged"

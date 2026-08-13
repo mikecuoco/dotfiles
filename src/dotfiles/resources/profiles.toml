@@ -27,8 +27,12 @@ links = [
   { src = "common/misc/.dircolors",      dst = ".dircolors" },
   { src = "common/misc/.gemrc",          dst = ".gemrc" },
   { src = "common/misc/.hushlogin",      dst = ".hushlogin" },
-  { src = "common/claude/CLAUDE.md",     dst = ".claude/CLAUDE.md" },
-  { src = "common/claude/settings.json", dst = ".claude/settings.json" },
+  { src = "common/agents/PREFERENCES.md", dst = ".claude/CLAUDE.md" },
+  { src = "common/claude/CLAUDE.md",      dst = ".claude/CLAUDE.md", mode = "append" },
+  { src = "common/claude/settings.json",  dst = ".claude/settings.json" },
+  { src = "common/agents/PREFERENCES.md", dst = ".codex/AGENTS.md" },
+  { src = "common/codex/AGENTS.md",       dst = ".codex/AGENTS.md", mode = "append" },
+  { src = "common/codex/preferences.toml", dst = ".codex/config.toml", mode = "merge-toml" },
   { src = "common/aws/config",           dst = ".aws/config" },
 ]
 
@@ -65,7 +69,8 @@ description = "Code Ocean cloud workstation or container"
 inherits = ["linux"]
 links = [
   { src = "codeocean/shell/.exports.codeocean", dst = ".exports.codeocean" },
-  { src = "codeocean/claude/CLAUDE.md",         dst = ".claude/CLAUDE.md", mode = "append" },
+  { src = "codeocean/agents/PREFERENCES.md",     dst = ".claude/CLAUDE.md", mode = "append" },
+  { src = "codeocean/agents/PREFERENCES.md",     dst = ".codex/AGENTS.md", mode = "append" },
   { src = "codeocean/claude/global.json",       dst = ".claude.json", mode = "merge-json" },
 ]
 
