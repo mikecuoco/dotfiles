@@ -2,10 +2,11 @@
 
 ## Exploration
 
-- Optimize for fast interactive work and permit notebook state while questions are changing.
+- Prioritize correct, robust, logically organized code and fast interactive work; permit notebook state while questions are changing.
 - Record enough context to preserve decisions and save expensive outputs rather than recomputing them casually.
+- Consider memory, CPU concurrency, runtime, and input scale before expensive work; prefer bounded or chunked processing where practical.
 - Address risks that could lose work, corrupt provenance, or fill root storage.
-- Do not require end-to-end execution or a finished `run`.
+- Do not require end-to-end execution, `conda-lock`, or a finished `run`, and do not prompt for them.
 
 ## Stabilization
 
@@ -13,9 +14,12 @@
 - Make parameters explicit in scripts or nearby configuration.
 - Separate immutable inputs, scratch intermediates, and final deliverables.
 - Promote genuinely shared helpers into a package.
-- Lock the environment once dependency choices settle.
+- Continue tracking CPU and memory costs as the workflow grows.
+- Do not lock the environment or develop or invoke `run` unless the user explicitly requests that reproducibility work.
 
 ## Finalization
+
+Perform this stage only when the user explicitly requests it. `conda-lock` remains separately opt-in if the request does not include locking.
 
 - Make required work headless and deterministic.
 - Remove reliance on hidden notebook execution order for required results.
@@ -45,7 +49,7 @@ For an exported repository, pass the repository root. `--format json` produces m
 - Random seeds and important analysis parameters are explicit.
 - Required work does not depend on hidden notebook state.
 - Shared code has clear imports and packaging.
-- Environment constraints and lock agree.
+- Environment constraints and lock agree, if locking was requested.
 - Temp files, caches, builds, environments, downloads, and installations resolve under `/scratch`.
 - `run` is executable, headless, minimal, and free of machine-specific paths.
 - Intermediates go to `/scratch`; only final deliverables go to `/results`.

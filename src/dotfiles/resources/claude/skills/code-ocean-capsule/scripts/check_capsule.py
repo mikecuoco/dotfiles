@@ -190,9 +190,9 @@ def review_capsule(root: Path, requested_stage: str = "auto") -> tuple[str, list
     if not any(path.is_file() for path in locks):
         findings.append(
             Finding(
-                "error" if finalizing else "info",
+                "info",
                 "missing-conda-lock",
-                "no conda-lock.yml found; lock once dependencies stabilize",
+                "no conda-lock.yml found; locking is optional unless explicitly requested",
                 str(environment_dir),
             )
         )
@@ -203,7 +203,7 @@ def review_capsule(root: Path, requested_stage: str = "auto") -> tuple[str, list
             Finding(
                 "error" if finalizing else "info",
                 "missing-run",
-                "run is not present; this is expected during exploration",
+                "run is not present; it is only required for explicitly requested finalization",
                 str(run),
             )
         )

@@ -112,9 +112,12 @@ def test_checker_enforces_finalization_requirements(tmp_path):
         "unnumbered-analysis-arm",
         "missing-dataset-manifest",
         "missing-environment-spec",
-        "missing-conda-lock",
         "missing-run",
     } <= codes
+    assert any(
+        item["code"] == "missing-conda-lock" and item["severity"] == "info"
+        for item in report["findings"]
+    )
 
 
 def test_attachment_parser_accepts_list_and_uuid_mapping(monkeypatch):

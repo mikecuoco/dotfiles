@@ -5,7 +5,7 @@ description: Organize, scaffold, edit, and review Code Ocean compute capsules us
 
 # Code Ocean Capsule
 
-Use an interactive-first workflow that becomes reproducible gradually. Organize code by scientific purpose, preserve dataset provenance, and do not force exploratory work into a finished pipeline prematurely.
+Use an interactive-first workflow. During exploration, prioritize correct, robust, logically organized code and fast iteration. Reproducibility tooling is opt-in: do not force exploratory work into a finished pipeline or introduce it merely because the capsule appears mature.
 
 ## Establish intent
 
@@ -15,13 +15,13 @@ Classify the request before acting:
 - **Scaffold**: create the minimum useful structure for a capsule or analysis arm.
 - **Edit**: make the requested organizational or reproducibility changes.
 - **Review**: report maturity, risks, and prioritized improvements without editing unless asked.
-- **Finalize**: turn stable interactive work into a clean reproducible run.
+- **Finalize**: when explicitly requested, turn stable interactive work into a clean reproducible run.
 
 Do not attach or detach Data Assets, create Code Ocean resources, run expensive analyses, or alter external storage unless the user explicitly requests it.
 
 ## Inspect before changing
 
-Locate the capsule root and inspect the relevant parts of `code/`, `environment/`, `.codeocean/datasets.json`, `data/`, `scratch/`, and `results/`, using their absolute Code Ocean paths when running inside a capsule. Inspect Git status and preserve unrelated changes. Infer whether the capsule is exploratory, stabilizing, or being finalized; a missing `run` is not a defect during exploration.
+Locate the capsule root and inspect the relevant parts of `code/`, `environment/`, `.codeocean/datasets.json`, `data/`, `scratch/`, and `results/`, using their absolute Code Ocean paths when running inside a capsule. Inspect Git status and preserve unrelated changes. Infer whether the capsule is exploratory or stabilizing, but treat it as being finalized only when the user explicitly requests finalization. Missing locks and `run` are not defects otherwise.
 
 ## Apply the core rules
 
@@ -30,8 +30,9 @@ Locate the capsule root and inspect the relevant parts of `code/`, `environment/
 3. Put all temporary files, caches, build products, downloaded models, package caches, environments, and interactive installations in subdirectories of `/scratch`. The root filesystem is only about 5 GB and fills especially quickly on GPU machines.
 4. Treat `/data` as immutable input, `/scratch` as disposable or workstation-local working storage, `/results` as final reproducible output, `/code` as analysis source, and `/environment` as recipes and locks—not installed environments.
 5. Maintain `/code/datasets.yaml` as the editable dataset manifest and `/code/DATASETS.md` as its generated human-readable view. Preserve manual provenance during refreshes.
-6. Keep human-edited Conda constraints in `/environment/environment.yml`, generate `/environment/conda-lock.yml` after solving, and place the actual environment and solver caches under `/scratch`.
-7. Build `run` late, once the stable workflow is worth reproducing. Keep it small, executable, headless, and focused on orchestration.
+6. Keep human-edited Conda constraints in `/environment/environment.yml` and place the actual environment and solver caches under `/scratch`. Do not generate, refresh, require, or prompt for `/environment/conda-lock.yml` unless the user explicitly requests it.
+7. Do not create, modify, invoke, or require `run` until the user explicitly requests the reproducible entrypoint. Then keep it small, executable, headless, and focused on orchestration.
+8. Consider memory footprint, CPU concurrency, runtime, scratch usage, and avoidable recomputation at every stage. Use bounded or chunked approaches where practical and surface material resource requirements.
 
 Number analysis arms with stable, zero-padded two-digit prefixes. Order them by dependency or scientific reading order, preserve useful gaps, and avoid casual renumbering because notebooks and saved artifacts may refer to their paths. Root manifests, `run`, and a shared package remain unnumbered.
 
@@ -40,7 +41,7 @@ Number analysis arms with stable, zero-padded two-digit prefixes. Order them by 
 - For scaffolding, reorganizing, or deciding where code belongs, read [references/capsule-layout.md](references/capsule-layout.md).
 - For creating or refreshing the dataset index, read [references/datasets.md](references/datasets.md), then use `${CLAUDE_SKILL_DIR}/scripts/refresh_datasets.py` when appropriate.
 - For Conda, `conda-lock`, installations, caches, or GPU-machine storage, read [references/environments.md](references/environments.md).
-- For reviews, stabilization, finalization, or `run`, read [references/reproducibility.md](references/reproducibility.md), then use `${CLAUDE_SKILL_DIR}/scripts/check_capsule.py` as a fast structural check.
+- For reviews or stabilization, read [references/reproducibility.md](references/reproducibility.md) to classify current-stage concerns without imposing later-stage work. For explicitly requested finalization or `run` work, also use `${CLAUDE_SKILL_DIR}/scripts/check_capsule.py` as a fast structural check.
 
 ## Work safely
 

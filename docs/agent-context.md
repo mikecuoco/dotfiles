@@ -103,7 +103,7 @@ Budgets are warnings rather than hard runtime limits:
 
 | Layer | Estimated-token limit |
 |---|---:|
-| Generated global instructions | 800 |
+| Generated global instructions | 900 |
 | Environment overlay | 500 |
 
 The deterministic estimate is `words × 4/3` and requires no tokenizer or

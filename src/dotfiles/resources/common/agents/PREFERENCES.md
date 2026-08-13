@@ -10,10 +10,17 @@
 - Read existing code and conventions before changing it.
 - Make the smallest change that solves the problem.
 - Prefer readable code over unnecessary abstraction.
+- During exploration, prioritize robust, logical code and fast iteration over reproducibility infrastructure.
+- Add reproducibility only when analysis stabilizes or the user requests it; do not prematurely finalize exploratory work.
 - Do not refactor unrelated code or add dependencies without reason.
 - Test meaningful changes. Never disable tests to make them pass.
 - Commit or push only when asked. Never force-push shared branches.
 - Reference code as `file:line`. Show commands actually run.
+
+# Compute resources
+
+- Always consider CPU and memory, including input scale, peak memory, concurrency, and recomputation.
+- Prefer bounded parallelism and streaming or chunking when practical; surface material constraints.
 
 # Python
 
@@ -21,8 +28,8 @@
 - For new Python-only projects, prefer uv.
 - Use conda/mamba when native dependencies make it useful.
 - Don't mutate global/base environments; create named envs.
-- When a Conda-based analysis step is finalized, prompt the user to use `conda-lock` to generate or refresh a lock named by inserting `.lock` before the existing environment YAML's suffix (for example, `environment.yml` becomes `environment.lock.yml` and `analysis.yaml` becomes `analysis.lock.yaml`).
-- Pin dependencies that affect reproducibility.
+- Do not create, refresh, require, or prompt for `conda-lock` unless the user explicitly asks for it.
+- Pin dependencies when reproducibility becomes an explicit goal; do not let early pinning slow exploratory iteration without a concrete need.
 - Use pathlib.Path, f-strings, dataclasses, match/case (Python 3.11+).
 
 # Plotting

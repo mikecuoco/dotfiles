@@ -35,7 +35,7 @@ Do not set `/scratch` paths as unconditional Dockerfile `ENV` values. `/scratch`
 
 ## Conda lifecycle
 
-Store recipes and locks—not installed environments—under `/environment`:
+Store recipes and, only when explicitly requested, locks—not installed environments—under `/environment`:
 
 ```text
 /environment
@@ -48,10 +48,10 @@ Store recipes and locks—not installed environments—under `/environment`:
 1. During exploration, update `environment.yml` as direct dependencies emerge.
 2. Avoid exporting every transitive dependency from a mutable environment.
 3. Solve and test with the actual environment under `/scratch/.dotfiles/envs/conda/<name>` and package/solver caches under `/scratch/.dotfiles/cache`.
-4. Once stable, generate a lock for the capsule's actual platform, normally `linux-64`.
-5. Commit `environment.yml` and `conda-lock.yml`; regenerate the lock whenever channels or constraints change.
-6. Recreate the finalized environment under `/scratch` from the lock when absent.
-7. Verify the bootstrap procedure with clean scratch storage and a Code Ocean Reproducible Run.
+4. Do not generate, refresh, require, or prompt for `conda-lock` unless the user explicitly requests it, even when the environment appears stable.
+5. When locking is requested, generate it for the capsule's actual platform, normally `linux-64`.
+6. Commit `environment.yml` and the requested `conda-lock.yml`; regenerate the lock whenever channels or constraints change.
+7. Recreate the finalized environment under `/scratch` from the lock when absent and verify the bootstrap procedure with clean scratch storage when finalization is requested.
 
 Inspect the installed `conda-lock` version before selecting exact CLI flags. A macOS or different-architecture lock is not a Code Ocean Linux lock. Keep channel priority explicit and do not mix ad hoc `pip install` operations into a supposedly locked environment.
 

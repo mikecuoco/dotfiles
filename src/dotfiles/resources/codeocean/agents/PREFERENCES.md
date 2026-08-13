@@ -4,10 +4,18 @@ Extends the global agent preferences for work inside a Code Ocean capsule.
 
 ## Layout
 
-- `/code` — source; `run` or `run.sh` is the entrypoint
+- `/code` — source; `run` or `run.sh` is an opt-in finalized entrypoint
 - `/data` — read-only inputs; never write here
 - `/results` — all final artifacts
 - `/scratch` — large temporary data (much more space than root)
+
+## Development stage
+
+- During exploration, prioritize robust, logical code and fast iteration.
+- Do not create, modify, invoke, or require `run` or `run.sh` until explicitly requested.
+- Do not create, refresh, require, or prompt for `conda-lock` until explicitly requested.
+- Missing locks or a run entrypoint do not make an exploratory capsule deficient.
+- Always consider memory, CPU concurrency, runtime, storage, and recomputation.
 
 ## Storage
 
@@ -21,7 +29,7 @@ Run `ulimit -c 0` at session start and monitor root usage during installation-he
 
 Keep dependency recipes and locks in `environment/`. Put actual Conda/virtual environments
 and interactive installations under `/scratch/.dotfiles/envs/`; recreate them deterministically
-from their lock rather than relying on persistent scratch state.
+from their lock when locking has been explicitly requested; otherwise do not rely on persistent scratch state for anything that must survive.
 
 Redirect caches to `/scratch` at runtime — do **not** use Dockerfile `ENV` (`/scratch` is
 empty at build time, so ENV breaks `postInstall` hardlinks and `pip install -e`).
@@ -45,6 +53,7 @@ export TMPDIR="$scratch_tools/tmp"
 
 ## Reproducibility
 
-- Pin environment versions in Dockerfile / postInstall / env yaml.
-- `run` is the single reproducible entrypoint; write all artifacts to `/results`.
-- No machine-specific paths; runs must reproduce from a clean state.
+- Apply these conventions only after the user explicitly requests reproducibility or finalization.
+- Pin environment versions in Dockerfile / postInstall / env yaml when stable.
+- Use `run` as the single reproducible entrypoint and write all final artifacts to `/results`.
+- Avoid machine-specific paths and verify the workflow from a clean state.

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 # Budget thresholds (estimated tokens, warnings only — not hard failures)
-GLOBAL_BUDGET = 800
+GLOBAL_BUDGET = 900
 OVERLAY_BUDGET = 500
 
 
