@@ -10,6 +10,18 @@ elif [ -x /usr/local/bin/brew ]; then
 fi
 export HOMEBREW_CASK_OPTS="--appdir=/Applications"
 
+# Cisco Secure Client (formerly AnyConnect)
+for _cisco_vpn_dir in /opt/cisco/secureclient/bin /opt/cisco/anyconnect/bin; do
+    if [ -x "$_cisco_vpn_dir/vpn" ]; then
+        case ":$PATH:" in
+            *":$_cisco_vpn_dir:"*) ;;
+            *) export PATH="$_cisco_vpn_dir:$PATH" ;;
+        esac
+        break
+    fi
+done
+unset _cisco_vpn_dir
+
 # Silence the "default shell is zsh" warning on macOS Catalina+
 export BASH_SILENCE_DEPRECATION_WARNING=1
 
