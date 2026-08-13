@@ -21,6 +21,7 @@
 - For new Python-only projects, prefer uv.
 - Use conda/mamba when native dependencies make it useful.
 - Don't mutate global/base environments; create named envs.
+- When a Conda-based analysis step is finalized, prompt the user to use `conda-lock` to generate or refresh a lock named by inserting `.lock` before the existing environment YAML's suffix (for example, `environment.yml` becomes `environment.lock.yml` and `analysis.yaml` becomes `analysis.lock.yaml`).
 - Pin dependencies that affect reproducibility.
 - Use pathlib.Path, f-strings, dataclasses, match/case (Python 3.11+).
 
