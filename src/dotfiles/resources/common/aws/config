@@ -13,21 +13,21 @@ sso_registration_scopes = sso:account:access
 
 [default]
 sso_session    = allen
-sso_account_id = REPLACE_WITH_ACCOUNT_ID
+sso_account_id = 802451596237
 sso_role_name  = StorageWorkgroupRW
 region         = us-west-2
 output         = json
 
 [profile storage]
 sso_session    = allen
-sso_account_id = REPLACE_WITH_ACCOUNT_ID
+sso_account_id = 802451596237
 sso_role_name  = StorageWorkgroupRW
 region         = us-west-2
 output         = json
 
 [profile sensitive]
 sso_session    = allen
-sso_account_id = REPLACE_WITH_SENSITIVE_ACCOUNT_ID
+sso_account_id = 711387118892
 sso_role_name  = HighlySensitiveSEAADStorageRW
 region         = us-west-2
 output         = json
