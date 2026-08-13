@@ -96,6 +96,8 @@ def test_presentation_style_has_balanced_hierarchy():
     assert float(values["axes.titlesize"]) > float(values["axes.labelsize"])
     assert float(values["axes.labelsize"]) > float(values["xtick.labelsize"])
     assert float(values["xtick.labelsize"]) >= float(values["legend.fontsize"])
+    assert values["figure.titleweight"] in {"normal", "bold"}
+    assert values["axes.titleweight"] in {"normal", "bold"}
     assert base["figure.constrained_layout.use"] == "True"
     assert base["savefig.bbox"] == "standard"
 

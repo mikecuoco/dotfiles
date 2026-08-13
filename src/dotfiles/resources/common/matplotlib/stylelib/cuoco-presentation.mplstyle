@@ -3,11 +3,11 @@
 figure.figsize: 12, 6.75
 figure.dpi: 120
 figure.titlesize: 22
-figure.titleweight: semibold
+figure.titleweight: normal
 
 font.size: 14
 axes.titlesize: 18
-axes.titleweight: semibold
+axes.titleweight: normal
 axes.titlepad: 8
 axes.labelsize: 16
 axes.labelpad: 5
