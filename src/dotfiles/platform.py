@@ -36,7 +36,7 @@ def detect_platform(override: str | None = None) -> PlatformInfo:
 
     1. ``override`` / ``--profile`` flag
     2. ``CODESPACES=true``       → codespace
-    3. ``CODEOCEAN_ENV`` present → codeocean
+    3. Code Ocean runtime variables present → codeocean
     4. SLURM / PBS / SGE env vars or cluster-like hostname → cluster
     5. Linux (no above signals)  → linux
     6. Darwin                    → macos
@@ -64,8 +64,18 @@ def detect_platform(override: str | None = None) -> PlatformInfo:
         return PlatformInfo("codespace", os_name, hostname, ["CODESPACES=true"])
 
     # ── Code Ocean ──────────────────────────────────────────────────────────
-    if env.get("CODEOCEAN_ENV") or env.get("CO_REPO_ID"):
-        return PlatformInfo("codeocean", os_name, hostname, ["CODEOCEAN_ENV detected"])
+    # CO_CAPSULE_ID / CO_PIPELINE_ID and CO_COMPUTATION_ID are the documented
+    # runtime variables. Keep the older signals for existing deployments.
+    codeocean_vars = (
+        "CO_CAPSULE_ID",
+        "CO_PIPELINE_ID",
+        "CO_COMPUTATION_ID",
+        "CODEOCEAN_ENV",
+        "CO_REPO_ID",
+    )
+    codeocean_signals = [f"{var} set" for var in codeocean_vars if env.get(var)]
+    if codeocean_signals:
+        return PlatformInfo("codeocean", os_name, hostname, codeocean_signals)
 
     # ── HPC Cluster ─────────────────────────────────────────────────────────
     cluster_sigs: list[str] = []

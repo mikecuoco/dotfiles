@@ -14,7 +14,8 @@ _CODESPACE_VARS = frozenset({
     "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN",
 })
 _ALL_PLATFORM_VARS = _CODESPACE_VARS | frozenset({
-    "CODEOCEAN_ENV", "CO_REPO_ID",
+    "CODEOCEAN_ENV", "CO_REPO_ID", "CO_CAPSULE_ID", "CO_PIPELINE_ID",
+    "CO_COMPUTATION_ID",
     "SLURM_JOB_ID", "PBS_JOBID", "SGE_TASK_ID", "LSB_JOBID",
 })
 
@@ -53,11 +54,22 @@ def test_codespaces_forwarding_domain():
     assert info.platform == "codespace"
 
 
-def test_codeocean_detection():
-    env = {**_clean_env(), "CO_REPO_ID": "abc123"}
+@pytest.mark.parametrize(
+    "variable",
+    (
+        "CO_CAPSULE_ID",
+        "CO_PIPELINE_ID",
+        "CO_COMPUTATION_ID",
+        "CODEOCEAN_ENV",
+        "CO_REPO_ID",
+    ),
+)
+def test_codeocean_detection(variable):
+    env = {**_clean_env(), variable: "abc123"}
     with patch.dict(os.environ, env, clear=True):
         info = detect_platform()
     assert info.platform == "codeocean"
+    assert info.signals == [f"{variable} set"]
 
 
 def test_slurm_detection():

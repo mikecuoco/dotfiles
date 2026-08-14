@@ -67,9 +67,10 @@ def check_anthropic() -> AuthStatus:
 
 
 def check_github() -> AuthStatus:
-    """Check GitHub auth via GH_TOKEN env var or gh CLI."""
-    if os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"):
-        return AuthStatus("GitHub", True, "GH_TOKEN is set")
+    """Check GitHub auth via environment credentials or the gh CLI."""
+    for variable in ("GH_TOKEN", "GITHUB_TOKEN", "GIT_ACCESS_TOKEN"):
+        if os.environ.get(variable):
+            return AuthStatus("GitHub", True, f"{variable} is set")
 
     if shutil.which("gh"):
         try:
@@ -93,7 +94,7 @@ def check_github() -> AuthStatus:
 
     return AuthStatus(
         "GitHub", False,
-        "GH_TOKEN not set and gh CLI not found — install gh or set GH_TOKEN",
+        "No GitHub token set and gh CLI not found — install gh or set GH_TOKEN",
     )
 
 

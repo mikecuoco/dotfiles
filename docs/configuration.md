@@ -19,7 +19,7 @@ Detection uses the first matching signal:
 | Detected by | Profile |
 |---|---|
 | `CODESPACES=true` or `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` | `codespace` |
-| `CODEOCEAN_ENV` or `CO_REPO_ID` | `codeocean` |
+| `CO_CAPSULE_ID`, `CO_PIPELINE_ID`, `CO_COMPUTATION_ID`, `CODEOCEAN_ENV`, or `CO_REPO_ID` | `codeocean` |
 | `SLURM_JOB_ID`, `PBS_JOBID`, `SGE_TASK_ID`, `LSB_JOBID`, or a cluster-like hostname | `cluster` |
 | Linux | `linux` |
 | macOS | `macos` |

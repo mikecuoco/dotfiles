@@ -56,4 +56,45 @@ def test_update_runs_fresh_install_after_upgrade(monkeypatch):
 
 def test_uv_tool_detection():
     assert update._is_uv_tool(Path("/Users/example/.local/share/uv/tools/mike-dotfiles/bin/python"))
+    assert update._is_uv_tool(
+        Path("/scratch/.dotfiles/envs/uv-tools/mike-dotfiles/bin/python")
+    )
     assert not update._is_uv_tool(Path("/usr/bin/python3"))
+
+
+def test_uv_tool_detection_uses_configured_directory(monkeypatch):
+    monkeypatch.setenv("UV_TOOL_DIR", "/custom/tool-environments")
+    executable = Path("/custom/tool-environments/mike-dotfiles/bin/python")
+    assert update._is_uv_tool(executable)
+
+
+def test_uv_tool_detection_uses_receipt_in_arbitrary_directory(tmp_path):
+    root = tmp_path / "arbitrary" / "mike-dotfiles"
+    root.mkdir(parents=True)
+    (root / "uv-receipt.toml").write_text("")
+    assert update._is_uv_tool(root / "bin" / "python")
+
+
+def test_upgrade_finds_uv_outside_path(monkeypatch, tmp_path):
+    uv = tmp_path / ".local" / "bin" / "uv"
+    uv.parent.mkdir(parents=True)
+    uv.write_text("")
+    monkeypatch.setattr(update.sys, "executable", "/scratch/envs/uv-tools/mike-dotfiles/bin/python")
+    monkeypatch.setattr(update.shutil, "which", lambda name: None)
+    monkeypatch.setattr(update.Path, "home", lambda: tmp_path)
+
+    assert update._upgrade_command() == [
+        str(uv), "tool", "upgrade", "mike-dotfiles"
+    ]
+
+
+def test_uv_install_without_uv_does_not_fall_back_to_pip(monkeypatch, capsys):
+    monkeypatch.setattr(update, "_find_uv", lambda: None)
+    monkeypatch.setattr(
+        update.sys,
+        "executable",
+        "/scratch/.dotfiles/envs/uv-tools/mike-dotfiles/bin/python",
+    )
+
+    assert update.run_update() == 1
+    assert "uv-managed installation" in capsys.readouterr().err

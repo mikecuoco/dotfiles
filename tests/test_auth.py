@@ -86,10 +86,22 @@ def test_github_gh_token():
     assert "ghs_fake" not in s.message
 
 
+def test_github_codeocean_git_access_token():
+    with patch.dict(
+        os.environ,
+        {"GIT_ACCESS_TOKEN": "codeocean-git-secret"},
+        clear=True,
+    ):
+        s = check_github()
+    assert s.configured is True
+    assert s.message == "GIT_ACCESS_TOKEN is set"
+    assert "codeocean-git-secret" not in s.message
+
+
 def test_github_cli_logged_in():
     import shutil
     env = {k: v for k, v in os.environ.items()
-           if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+           if k not in ("GH_TOKEN", "GITHUB_TOKEN", "GIT_ACCESS_TOKEN")}
     with patch.dict(os.environ, env, clear=True), \
          patch("dotfiles.auth.shutil.which", return_value="/usr/bin/gh"), \
          patch("dotfiles.auth.subprocess.run") as mock_run:
@@ -100,7 +112,7 @@ def test_github_cli_logged_in():
 
 def test_github_not_configured():
     env = {k: v for k, v in os.environ.items()
-           if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+           if k not in ("GH_TOKEN", "GITHUB_TOKEN", "GIT_ACCESS_TOKEN")}
     with patch.dict(os.environ, env, clear=True), \
          patch("dotfiles.auth.shutil.which", return_value=None):
         s = check_github()
