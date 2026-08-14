@@ -29,6 +29,7 @@ CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "agents" / "PREFERENCES.md"
 CODEOCEAN_EXPORTS = RESOURCES_DIR / "codeocean" / "shell" / ".exports.codeocean"
 CLAUDE_SETTINGS = RESOURCES_DIR / "common" / "claude" / "settings.json"
 CODEOCEAN_GLOBAL = RESOURCES_DIR / "codeocean" / "claude" / "global.json"
+REPO_ROOT = RESOURCES_DIR.parents[2]
 
 
 def _global_text() -> str:
@@ -37,6 +38,10 @@ def _global_text() -> str:
 
 def _codeocean_text() -> str:
     return CODEOCEAN_MD.read_text()
+
+
+def test_repository_agent_instructions_stay_aligned():
+    assert (REPO_ROOT / "AGENTS.md").read_text() == (REPO_ROOT / "CLAUDE.md").read_text()
 
 
 # ── budget tests ──────────────────────────────────────────────────────────────
@@ -176,15 +181,19 @@ def test_no_cfg_memory_path_in_global():
     )
 
 
-def test_global_memory_policy_uses_mirrored_local_agent_directories():
-    """Conversation summaries are mirrored in both local agent stores."""
-    text = _global_text()
-    for directory in (".claude/memory/", ".codex/memories/"):
-        assert directory in text
-        assert directory in GLOBAL_GITIGNORE.read_text()
-    assert "every completed conversation" in text
-    assert "Markdown summary" in text
-    assert "in sync" in text
+def test_shared_project_memory_uses_singular_agent_directory():
+    """Both agents share one ignored project-local memory directory."""
+    text = _global_text() + (REPO_ROOT / "docs" / "agent-context.md").read_text()
+    assert ".agents/memory/" in text
+    assert ".agents/memory/" in GLOBAL_GITIGNORE.read_text()
+    assert ".agents/memory/" in (REPO_ROOT / ".gitignore").read_text()
+    for obsolete in (".claude/memory/", ".codex/memories/", ".agents/memories/"):
+        assert obsolete not in text
+        assert obsolete not in GLOBAL_GITIGNORE.read_text()
+    assert "memories = true" not in CODEX_SETTINGS.read_text()
+    assert not (
+        RESOURCES_DIR / "common" / "agents" / "skills" / "session-handoff"
+    ).exists()
 
 
 def test_no_codeocean_text_in_global():

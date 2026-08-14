@@ -32,38 +32,20 @@
   exploration without a concrete need.
 - Use pathlib.Path, f-strings, dataclasses, match/case (Python 3.11+).
 
-# Plotting
+# Project memory
 
-- Prefer concise seaborn calls; use matplotlib only for needed control.
-- Apply `plt.style.use(["cuoco-base", "cuoco-presentation"])` by default; use `cuoco-manuscript` or `cuoco-poster` when the deliverable requires it.
-- Do not duplicate shared style settings; follow venue requirements and update
-  shared styles only for global defaults.
-- For manuscripts, size figures at their final 89 mm or 183 mm width and label panels with bold, upright 8 pt lowercase letters.
-- Never rely on color alone or use rainbow/red-green contrasts; label axes with
-  units and define error bars and sample sizes.
-
-# Jupyter notebooks
-
-- Keep notebooks linear, fresh-kernel runnable, and composed of short,
-  single-purpose cells. Put imports/configuration near the top.
-- Use Markdown for intent, assumptions, and conclusions; prefer rich previews
-  to verbose output. Extract reusable logic; seed randomness; address warnings.
-- Never overwrite source data; keep derived outputs separate. Keep source
-  notebooks unexecuted.
-- Save executed copies as `<name>.out.ipynb`, regenerate after source changes,
-  never edit directly, and keep them out of Git. Before finishing, restart and
-  run all cells, saving results only to the `.out.ipynb` copy.
-
-# Memory
-
-- Store short, factual, durable, non-obvious conclusions—not transcripts,
-  project-file facts, secrets, or sensitive data. Update or remove stale or
-  conflicting memories.
-- After every completed conversation, create a concise Markdown summary in both
-  repository-local memory directories: `.claude/memory/` and
-  `.codex/memories/`. Keep identical dated, descriptive files in sync.
-- Include the request, decisions, changes, validation, durable lessons, and
-  remaining work. Keep these files local and never commit them.
+- Store project-specific memories as individual Markdown files under
+  `<repo>/.agents/memory/`. At the start of repository work, scan filenames and
+  read only memories relevant to the task.
+- Use one concise, descriptively named file per durable, non-obvious fact or
+  decision. Update or remove stale and conflicting memories instead of adding
+  duplicates.
+- Treat memories as advisory and verify material claims against current project
+  files. After changing memory, run `dotfiles memory check --repo <repo>` and
+  mention any file created, updated, or removed in the final response.
+- Do not store transcripts, task status, secrets, sensitive data, or facts that
+  are already clear from project files. Keep required rules in checked-in
+  project instructions or documentation.
 
 # Project instructions
 

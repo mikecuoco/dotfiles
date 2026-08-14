@@ -61,6 +61,22 @@ environment variables or the Claude CLI; GitHub from `GH_TOKEN` or `gh`; and
 optional Synapse, Code Ocean, AWS, OpenAI, and Mem0 credentials. It exits
 nonzero only when required Claude authentication is missing.
 
+## Shared project memory
+
+```bash
+dotfiles memory init [--repo DIR]
+dotfiles memory list [--repo DIR] [--json]
+dotfiles memory check [--repo DIR] [--json]
+dotfiles memory migrate [--repo DIR] [--apply]
+```
+
+These commands manage the custom `.agents/memory/` convention shared by Claude
+Code and Codex. `init` creates the directory safely, `list` reports filenames
+and titles, and `check` validates the file contract and Git ignore behavior.
+`migrate` reviews obsolete agent-specific locations; `--apply` copies only safe
+candidates and never removes legacy files. See
+[Shared project memory](project-memory.md).
+
 ## Profiles and instruction budgets
 
 ```bash

@@ -144,6 +144,29 @@ def run_install(
         reports.append(rpt)
         _print_line(rpt, quiet=quiet)
 
+    # First-party skills are local, portable resources and are part of the core
+    # install. Downloaded GPTomics skill groups remain opt-in through
+    # ``dotfiles skills install``.
+    from .agent_skills import run_bundled_skills_setup
+
+    skill_statuses = []
+    if not quiet:
+        print("\nAgent skills")
+    for label, target in (
+        ("Claude Code", home / ".claude" / "skills"),
+        ("Codex", home / ".agents" / "skills"),
+    ):
+        if not quiet:
+            print(f"  {label}")
+        skill_statuses.extend(
+            run_bundled_skills_setup(
+                resources,
+                target,
+                dry_run=dry_run,
+                quiet=quiet,
+            )
+        )
+
     # Persist state & profile name
     if not dry_run:
         _write_state(
@@ -169,15 +192,17 @@ def run_install(
     )
     n_ok = sum(1 for r in reports if r.result == Result.UNCHANGED)
     n_err = sum(1 for r in reports if r.result == Result.ERROR)
+    n_skill_err = sum(1 for status in skill_statuses if not status.installed)
 
     if not quiet:
         print()
         print(
             f"{'[dry-run] ' if dry_run else ''}Done: "
-            f"{n_linked} installed, {n_ok} unchanged, {n_err} errors"
+            f"{n_linked} installed, {n_ok} unchanged, "
+            f"{n_err + n_skill_err} errors"
         )
 
-    return n_err == 0
+    return n_err == 0 and n_skill_err == 0
 
 
 def run_status(home: Optional[Path] = None) -> int:

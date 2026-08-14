@@ -10,6 +10,8 @@ retrieve specialized knowledge when needed instead of pre-loading everything.
 ```text
 canonical:
     common/agents/PREFERENCES.md       shared cross-agent preferences
+    common/agents/skills/              shared cross-agent workflows
+    common/agents/skills.toml          optional external skill groups
 
 tool-specific:
     common/claude/CLAUDE.md            Claude delegation policy
@@ -26,11 +28,11 @@ project-specific:
     <repo>/CLAUDE.md or AGENTS.md      stable project conventions
 
 scoped/procedural:
-    rules and skills                   retrieved when applicable
+    shared Agent Skills                retrieved when applicable
 
 learned/temporary:
-    conversation summaries, plans,
-    scratch context                    summaries persist locally; transcripts do not
+    .agents/memory/*.md, plans,
+    scratch context                    project-local or discardable state
 ```
 
 The installer generates the two global instruction files from the canonical
@@ -45,8 +47,8 @@ Claude and Codex aligned without putting Claude model names in Codex guidance.
 | Tool supplement | Delegation and model/effort guidance specific to Claude or Codex |
 | Profile overlay | Environment invariants such as filesystem layout and resource limits |
 | Project instructions | Stable conventions every session in that repository needs |
-| Rules and skills | Scoped or procedural knowledge fetched when applicable |
-| Conversation memory | Mirrored local Markdown summary per completed conversation, including outcomes and handoff state |
+| Agent skills | Scoped or procedural knowledge fetched when applicable |
+| Project memory | Local `.agents/memory/*.md` files shared by both agents |
 | Temporary context | Plans, debug notes, and task state that can be discarded |
 
 ## Configuration parity
@@ -69,19 +71,20 @@ Settings without true equivalents are intentionally not translated. Claude's
 Claude settings; Codex keeps its native behavior. Plugin, MCP, and skill parity
 is managed separately from preferences.
 
-## Memory policy
+## Project memory policy
 
-Store concise summaries, not transcripts. At the end of every conversation,
-write one dated, descriptive Markdown file in both project-local memory
-directories:
+Claude and Codex share one repository-local memory directory:
+`.agents/memory/`. Each durable memory is an individual Markdown file with a
+concise, descriptive filename. Agents scan filenames at the start of repository
+work and read only files relevant to the current task.
 
-- Claude: `.claude/memory/`
-- Codex: `.codex/memories/`
+The directory is globally Git-ignored. Do not include transcripts, temporary
+task status, secrets, sensitive data, or facts already evident from project
+files. Update or remove stale and conflicting files rather than accumulating
+duplicates.
 
-Keep matching filenames and contents in the two directories. Record the
-request, decisions, changes, validation, durable lessons, and remaining work.
-These directories are globally Git-ignored: they preserve local continuity but
-must not be committed. Do not include secrets or sensitive data.
+See [Shared project memory](project-memory.md) for the file contract, CLI
+validation, and conservative legacy migration behavior.
 
 **Bad:**
 
@@ -94,7 +97,7 @@ must not be committed. Do not include secrets or sensitive data.
 
 Promote a fact only when it is useful in a future session. Stable project
 invariants belong in project instructions or documentation. Non-obvious learned
-facts may go to memory. Everything else should be discarded.
+facts may go in `.agents/memory/`. Everything else should be discarded.
 
 Do not automatically promote every correction into permanent global guidance.
 Global preferences should change only for genuinely cross-project behavior.
@@ -122,6 +125,5 @@ external service.
 
 ## Memory maintenance
 
-Periodically prune stale or duplicate summaries, shorten verbose entries,
-resolve contradictions, and promote stable project invariants into project
-documentation or instructions.
+Periodically remove stale or duplicate memory files and resolve contradictions.
+Promote required project invariants into project documentation or instructions.

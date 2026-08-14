@@ -14,7 +14,13 @@ import pytest
 from dotfiles.install import get_resources_dir
 
 
-SKILL = get_resources_dir() / "claude" / "skills" / "code-ocean-capsule"
+SKILL = (
+    get_resources_dir()
+    / "common"
+    / "agents"
+    / "skills"
+    / "code-ocean-capsule"
+)
 CHECKER = SKILL / "scripts" / "check_capsule.py"
 REFRESHER = SKILL / "scripts" / "refresh_datasets.py"
 

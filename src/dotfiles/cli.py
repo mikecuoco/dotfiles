@@ -109,7 +109,7 @@ def main() -> None:
     # ── skills ───────────────────────────────────────────────────────────────
     p_skills = sub.add_parser(
         "skills",
-        help="Manage bundled and GPTomics skills for Claude Code",
+        help="Manage bundled and GPTomics skills for Claude Code and Codex",
     )
     skills_sub = p_skills.add_subparsers(
         dest="skills_command",
@@ -119,7 +119,7 @@ def main() -> None:
 
     p_skills_install = skills_sub.add_parser(
         "install",
-        help="Install bundled skills and selected GPTomics skills into ~/.claude/skills/",
+        help="Install skills into ~/.claude/skills/ and ~/.agents/skills/",
     )
     p_skills_install.add_argument(
         "--with",
@@ -130,6 +130,11 @@ def main() -> None:
         help="Additional skill group to install: spatial | genomics | all (repeatable)",
     )
     p_skills_install.add_argument(
+        "--allow-large",
+        action="store_true",
+        help="Allow the 561-skill 'all' group despite discovery-context costs",
+    )
+    p_skills_install.add_argument(
         "--dry-run", "-n",
         action="store_true",
         help="Show what would be done without making any changes",
@@ -137,7 +142,20 @@ def main() -> None:
 
     p_skills_update = skills_sub.add_parser(
         "update",
-        help="Refresh bundled skills and pull the latest GPTomics skills",
+        help="Refresh bundled skills and selected GPTomics groups",
+    )
+    p_skills_update.add_argument(
+        "--with",
+        dest="extra_groups",
+        action="append",
+        default=[],
+        metavar="GROUP",
+        help="Additional skill group to update: spatial | genomics | all (repeatable)",
+    )
+    p_skills_update.add_argument(
+        "--allow-large",
+        action="store_true",
+        help="Allow the 561-skill 'all' group despite discovery-context costs",
     )
     p_skills_update.add_argument(
         "--dry-run", "-n",
@@ -147,7 +165,49 @@ def main() -> None:
 
     skills_sub.add_parser(
         "status",
-        help="Show dotfiles-managed and GPTomics skills in ~/.claude/skills/",
+        help="Show dotfiles-managed and GPTomics skills for Claude Code and Codex",
+    )
+
+    # ── project memory ──────────────────────────────────────────────────────
+    p_memory = sub.add_parser(
+        "memory",
+        help="Manage shared project memories under .agents/memory/",
+    )
+    memory_sub = p_memory.add_subparsers(
+        dest="memory_command",
+        metavar="SUBCOMMAND",
+    )
+    memory_sub.required = True
+
+    memory_commands = {
+        "init": memory_sub.add_parser(
+            "init", help="Create the project memory directory safely"
+        ),
+        "list": memory_sub.add_parser(
+            "list", help="List memory filenames and titles"
+        ),
+        "check": memory_sub.add_parser(
+            "check", help="Validate project memory files and Git ignore behavior"
+        ),
+        "migrate": memory_sub.add_parser(
+            "migrate", help="Review or copy safe files from obsolete memory paths"
+        ),
+    }
+    for memory_parser in memory_commands.values():
+        memory_parser.add_argument(
+            "--repo",
+            metavar="DIR",
+            default=".",
+            help="Repository path (default: current directory)",
+        )
+    for name in ("list", "check"):
+        memory_commands[name].add_argument(
+            "--json", action="store_true", help="Emit results as JSON"
+        )
+    memory_commands["migrate"].add_argument(
+        "--apply",
+        action="store_true",
+        help="Copy safe candidates; never deletes legacy files",
     )
 
     # ── claude ───────────────────────────────────────────────────────────────
@@ -216,51 +276,65 @@ def main() -> None:
     elif args.command == "skills":
         from pathlib import Path
         from . import RESOURCES_DIR
-        from .claude_skills import run_skills_setup, check_skill_statuses
+        from .agent_skills import run_skills_setup, check_skill_statuses
 
         cache_dir = Path.home() / ".local" / "share" / "dotfiles" / "bioskills"
         target_dir = Path.home() / ".claude" / "skills"
+        codex_target_dir = Path.home() / ".agents" / "skills"
 
-        if args.skills_command == "install":
+        if args.skills_command in {"install", "update"}:
             groups = ["default"] + (args.extra_groups or [])
+            if "all" in groups and not args.allow_large:
+                p_skills.error("the 'all' group requires --allow-large")
             statuses = run_skills_setup(
                 resources_dir=RESOURCES_DIR,
                 groups=groups,
                 cache_dir=cache_dir,
                 target_dir=target_dir,
+                codex_target_dir=codex_target_dir,
                 dry_run=args.dry_run,
-            )
-            failed = [s for s in statuses if not s.installed and not args.dry_run]
-            sys.exit(1 if failed else 0)
-        elif args.skills_command == "update":
-            # Re-pull and refresh; re-uses run_skills_setup which always pulls
-            # when .git already exists.
-            from dotfiles.claude_skills import load_skills_config
-            cfg = load_skills_config(RESOURCES_DIR)
-            all_groups = list(cfg.groups)
-            statuses = run_skills_setup(
-                resources_dir=RESOURCES_DIR,
-                groups=all_groups,
-                cache_dir=cache_dir,
-                target_dir=target_dir,
-                dry_run=args.dry_run,
-                update=True,
+                update=args.skills_command == "update",
             )
             failed = [s for s in statuses if not s.installed and not args.dry_run]
             sys.exit(1 if failed else 0)
         elif args.skills_command == "status":
-            statuses = check_skill_statuses(target_dir)
-            total = len(statuses)
-            if total == 0:
-                print("  – no managed skills installed in ~/.claude/skills/")
-                print("    Run: dotfiles skills install")
-            else:
-                from collections import Counter
+            from collections import Counter
+            found = False
+            for agent, agent_target in (
+                ("Claude Code", target_dir),
+                ("Codex", codex_target_dir),
+            ):
+                statuses = check_skill_statuses(agent_target)
+                total = len(statuses)
+                if total == 0:
+                    print(f"  – no managed {agent} skills installed in {agent_target}")
+                    continue
+                found = True
                 by_cat = Counter(s.category for s in statuses)
-                print(f"  {total} Claude Code skill(s) found in {target_dir}")
+                print(f"  {total} {agent} skill(s) found in {agent_target}")
                 for cat, count in sorted(by_cat.items()):
                     print(f"    {cat:<30} {count}")
+            if not found:
+                print("    Run: dotfiles skills install")
             sys.exit(0)
+    elif args.command == "memory":
+        from pathlib import Path
+        from .project_memory import (
+            run_memory_check,
+            run_memory_init,
+            run_memory_list,
+            run_memory_migrate,
+        )
+
+        repo = Path(args.repo)
+        if args.memory_command == "init":
+            sys.exit(run_memory_init(repo))
+        if args.memory_command == "list":
+            sys.exit(run_memory_list(repo, as_json=args.json))
+        if args.memory_command == "check":
+            sys.exit(run_memory_check(repo, as_json=args.json))
+        if args.memory_command == "migrate":
+            sys.exit(run_memory_migrate(repo, apply=args.apply))
     elif args.command == "claude":
         from . import RESOURCES_DIR
         from .claude_plugins import run_claude_setup

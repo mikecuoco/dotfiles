@@ -39,9 +39,9 @@ Number analysis arms with stable, zero-padded two-digit prefixes. Order them by 
 ## Load detailed guidance only when needed
 
 - For scaffolding, reorganizing, or deciding where code belongs, read [references/capsule-layout.md](references/capsule-layout.md).
-- For creating or refreshing the dataset index, read [references/datasets.md](references/datasets.md), then use `${CLAUDE_SKILL_DIR}/scripts/refresh_datasets.py` when appropriate.
+- For creating or refreshing the dataset index, read [references/datasets.md](references/datasets.md), resolve this `SKILL.md` file's directory as `<skill-dir>`, then use `<skill-dir>/scripts/refresh_datasets.py` when appropriate.
 - For Conda, `conda-lock`, installations, caches, or GPU-machine storage, read [references/environments.md](references/environments.md).
-- For reviews or stabilization, read [references/reproducibility.md](references/reproducibility.md) to classify current-stage concerns without imposing later-stage work. For explicitly requested finalization or `run` work, also use `${CLAUDE_SKILL_DIR}/scripts/check_capsule.py` as a fast structural check.
+- For reviews or stabilization, read [references/reproducibility.md](references/reproducibility.md) to classify current-stage concerns without imposing later-stage work. For explicitly requested finalization or `run` work, resolve this `SKILL.md` file's directory as `<skill-dir>`, then use `<skill-dir>/scripts/check_capsule.py` as a fast structural check.
 
 ## Work safely
 

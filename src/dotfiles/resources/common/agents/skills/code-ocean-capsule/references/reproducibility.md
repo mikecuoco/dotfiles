@@ -34,8 +34,8 @@ Perform this stage only when the user explicitly requests it. `conda-lock` remai
 Use the bundled checker before making broad changes and after finalization:
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/check_capsule.py" --root / --stage auto
-python "${CLAUDE_SKILL_DIR}/scripts/check_capsule.py" --root / --stage finalization --strict
+python "<skill-dir>/scripts/check_capsule.py" --root / --stage auto
+python "<skill-dir>/scripts/check_capsule.py" --root / --stage finalization --strict
 ```
 
 For an exported repository, pass the repository root. `--format json` produces machine-readable findings. The checker does not execute scientific code and its findings require judgment; it deliberately treats missing final artifacts as informational during exploration.

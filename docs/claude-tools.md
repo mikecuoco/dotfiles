@@ -1,4 +1,4 @@
-# Claude Code integrations and skills
+# Claude Code integrations
 
 This guide covers the optional Claude Code setup commands. Run `dotfiles
 doctor` after setup to inspect the resulting integration and skill state.
@@ -30,32 +30,8 @@ configured.
 The 10x Genomics, ChEMBL, and Consensus life-sciences plugins are intentionally
 not installed.
 
-## Skills
-
-```bash
-dotfiles skills install [--with GROUP]... [--dry-run]
-dotfiles skills update [--dry-run]
-dotfiles skills status
-```
-
-`skills install` always installs bundled first-party skills and the default
-GPTomics group. Add `--with spatial`, `--with genomics`, or `--with all` to
-include additional groups; the option may be repeated. Downloaded source is
-cached in `~/.local/share/dotfiles/bioskills`, and installed skills are placed
-in `~/.claude/skills`.
-
-`--dry-run` reports intended work without copying files or fetching the skills
-repository. `skills update` refreshes bundled skills and every configured
-GPTomics group. `skills status` is read-only and reports managed skills found
-under `~/.claude/skills`.
-
-```bash
-# Default RNA-seq and single-cell skills plus spatial transcriptomics
-dotfiles skills install --with spatial
-
-# Refresh bundled skills and every GPTomics group
-dotfiles skills update
-```
+Shared Claude Code and Codex skills are documented in
+[Agent skills](agent-skills.md).
 
 ## Authentication and ephemeral environments
 
@@ -67,7 +43,7 @@ requirements.
 |---|---|---|
 | Claude subscription OAuth | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` |
 | Anthropic API | `ANTHROPIC_API_KEY` | `claude auth login` |
-| GitHub | `GH_TOKEN` | `gh auth login` |
+| GitHub | `GH_TOKEN` | Code Ocean `GIT_ACCESS_TOKEN` or `gh auth login` |
 | Synapse | `SYNAPSE_AUTH_TOKEN` | `synapse login` |
 | Code Ocean API | `CODEOCEAN_API_TOKEN` | — |
 | OpenAI API | `OPENAI_API_KEY` | — |

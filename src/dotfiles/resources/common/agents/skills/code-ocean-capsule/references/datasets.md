@@ -31,8 +31,8 @@ Optional provenance systems are welcome; do not force every entry to have every 
 The helper reads Code Ocean's attachment metadata, optionally enriches it through the Data Asset API, merges it without removing curated fields, and regenerates the Markdown index:
 
 ```bash
-uv run --script "${CLAUDE_SKILL_DIR}/scripts/refresh_datasets.py" --root / --dry-run
-uv run --script "${CLAUDE_SKILL_DIR}/scripts/refresh_datasets.py" --root /
+uv run --script "<skill-dir>/scripts/refresh_datasets.py" --root / --dry-run
+uv run --script "<skill-dir>/scripts/refresh_datasets.py" --root /
 ```
 
 For an exported capsule repository, pass the repository root instead. Override discovery with `--datasets-json`, `--manifest`, or `--markdown` if its layout differs. Use `--offline` to refresh only attachment status and mounts. Use `--metadata-dir DIR` to consume previously saved API response files named `<asset-id>.json` without network access.

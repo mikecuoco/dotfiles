@@ -1,4 +1,4 @@
-"""Tests for bundled and GPTomics Claude Code skill management.
+"""Tests for bundled and GPTomics Claude Code and Codex skill management.
 
 All subprocess calls (git) and filesystem writes are mocked so these tests run
 without network access or a live bioSkills installation.
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from dotfiles.claude_skills import (
+from dotfiles.agent_skills import (
     SkillStatus,
     SkillsConfig,
     check_skill_statuses,
@@ -104,6 +104,11 @@ def _fake_skill_tree(tmp_path: Path, entries: list[tuple[str, str, str]]) -> Pat
     for category, skill_name, content in entries:
         skill_dir = cache / category / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
+        if not content.startswith("---\n"):
+            content = (
+                f"---\nname: {skill_name}\n"
+                f"description: Test {skill_name} workflow\n---\n\n{content}\n"
+            )
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
     return cache
 
@@ -115,7 +120,7 @@ def _fake_bundled_skill(
 ) -> Path:
     """Create a resources tree containing one first-party skill."""
     resources = tmp_path / "resources"
-    skill = resources / "claude" / "skills" / name
+    skill = resources / "common" / "agents" / "skills" / name
     skill.mkdir(parents=True)
     content = files or {
         "SKILL.md": f"---\nname: {name}\ndescription: Test skill\n---\n",
@@ -130,7 +135,7 @@ def _fake_bundled_skill(
 # ── Bundled first-party skills ────────────────────────────────────────────────
 
 def test_code_ocean_skill_is_packaged():
-    skill = RESOURCES / "claude" / "skills" / "code-ocean-capsule"
+    skill = RESOURCES / "common" / "agents" / "skills" / "code-ocean-capsule"
     text = (skill / "SKILL.md").read_text(encoding="utf-8")
 
     assert "name: code-ocean-capsule" in text
@@ -145,7 +150,7 @@ def test_code_ocean_skill_is_packaged():
     assert (skill / "references" / "reproducibility.md").is_file()
     assert (skill / "scripts" / "refresh_datasets.py").is_file()
     assert (skill / "scripts" / "check_capsule.py").is_file()
-    assert not (skill / "agents" / "openai.yaml").exists()
+    assert (skill / "agents" / "openai.yaml").is_file()
 
 
 def test_bundled_skill_directory_is_copied(tmp_path):
@@ -182,40 +187,96 @@ def test_bundled_skill_install_is_idempotent(tmp_path):
 def test_bundled_skill_update_removes_only_obsolete_managed_files(tmp_path):
     resources = _fake_bundled_skill(
         tmp_path,
-        files={"SKILL.md": "old", "references/obsolete.md": "old"},
+        files={
+            "SKILL.md": "---\nname: example-skill\ndescription: Test\n---\nold\n",
+            "references/obsolete.md": "old",
+        },
     )
     target = tmp_path / "target"
     run_bundled_skills_setup(resources, target)
     user_file = target / "example-skill" / "notes.md"
     user_file.write_text("keep me", encoding="utf-8")
 
-    source_skill = resources / "claude" / "skills" / "example-skill"
-    (source_skill / "SKILL.md").write_text("new", encoding="utf-8")
+    source_skill = resources / "common" / "agents" / "skills" / "example-skill"
+    new_text = "---\nname: example-skill\ndescription: Test\n---\nnew\n"
+    (source_skill / "SKILL.md").write_text(new_text, encoding="utf-8")
     (source_skill / "references" / "obsolete.md").unlink()
     statuses = run_bundled_skills_setup(resources, target)
 
     assert statuses[0].message == "updated"
-    assert (target / "example-skill" / "SKILL.md").read_text() == "new"
+    assert (target / "example-skill" / "SKILL.md").read_text() == new_text
     assert not (target / "example-skill" / "references" / "obsolete.md").exists()
     assert user_file.read_text() == "keep me"
 
 
+def test_removed_bundled_skill_is_pruned_from_managed_install(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+
+    source = resources / "common" / "agents" / "skills" / "example-skill"
+    (source / "SKILL.md").unlink()
+    source.rmdir()
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert statuses == [SkillStatus("example-skill", "first-party", True, "removed")]
+    assert not (target / "example-skill").exists()
+    assert "example-skill" not in (
+        target / ".dotfiles-managed-skills.json"
+    ).read_text(encoding="utf-8")
+
+
+def test_removed_bundled_skill_preserves_user_files(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+    user_file = target / "example-skill" / "notes.md"
+    user_file.write_text("keep me", encoding="utf-8")
+
+    source = resources / "common" / "agents" / "skills" / "example-skill"
+    (source / "SKILL.md").unlink()
+    source.rmdir()
+    statuses = run_bundled_skills_setup(resources, target)
+
+    assert statuses[0].message == "removed"
+    assert not (target / "example-skill" / "SKILL.md").exists()
+    assert user_file.read_text(encoding="utf-8") == "keep me"
+
+
+def test_removed_bundled_skill_dry_run_writes_nothing(tmp_path):
+    resources = _fake_bundled_skill(tmp_path)
+    target = tmp_path / "target"
+    run_bundled_skills_setup(resources, target)
+
+    source = resources / "common" / "agents" / "skills" / "example-skill"
+    (source / "SKILL.md").unlink()
+    source.rmdir()
+    statuses = run_bundled_skills_setup(resources, target, dry_run=True)
+
+    assert statuses[0].message == "would remove"
+    assert (target / "example-skill" / "SKILL.md").is_file()
+
+
 def test_bundled_skill_update_refuses_new_path_that_collides_with_user_file(tmp_path):
-    resources = _fake_bundled_skill(tmp_path, files={"SKILL.md": "old"})
+    old_text = "---\nname: example-skill\ndescription: Test\n---\nold\n"
+    resources = _fake_bundled_skill(tmp_path, files={"SKILL.md": old_text})
     target = tmp_path / "target"
     run_bundled_skills_setup(resources, target)
     user_file = target / "example-skill" / "notes.md"
     user_file.write_text("user content", encoding="utf-8")
 
-    source_skill = resources / "claude" / "skills" / "example-skill"
-    (source_skill / "SKILL.md").write_text("new", encoding="utf-8")
+    source_skill = resources / "common" / "agents" / "skills" / "example-skill"
+    (source_skill / "SKILL.md").write_text(
+        "---\nname: example-skill\ndescription: Test\n---\nnew\n",
+        encoding="utf-8",
+    )
     (source_skill / "notes.md").write_text("bundled content", encoding="utf-8")
 
     statuses = run_bundled_skills_setup(resources, target)
 
     assert not statuses[0].installed
     assert "unmanaged file conflicts" in statuses[0].message
-    assert (target / "example-skill" / "SKILL.md").read_text() == "old"
+    assert (target / "example-skill" / "SKILL.md").read_text() == old_text
     assert user_file.read_text() == "user content"
 
 
@@ -270,8 +331,8 @@ def test_dry_run_makes_no_git_calls(tmp_path, capsys):
     target = tmp_path / "skills"
     cache  = tmp_path / "cache"
 
-    with patch("dotfiles.claude_skills._run_git") as mock_git, \
-         patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"):
+    with patch("dotfiles.agent_skills._run_git") as mock_git, \
+         patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"):
         run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -288,8 +349,8 @@ def test_dry_run_makes_no_file_writes(tmp_path, capsys):
     target = tmp_path / "skills"
     cache  = tmp_path / "cache"
 
-    with patch("dotfiles.claude_skills._run_git"), \
-         patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"):
+    with patch("dotfiles.agent_skills._run_git"), \
+         patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"):
         run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -305,8 +366,8 @@ def test_dry_run_output_mentions_dry(capsys, tmp_path):
     target = tmp_path / "skills"
     cache  = tmp_path / "cache"
 
-    with patch("dotfiles.claude_skills._run_git"), \
-         patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"):
+    with patch("dotfiles.agent_skills._run_git"), \
+         patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"):
         run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -326,9 +387,9 @@ def test_first_run_clones_repo(tmp_path):
     cache  = tmp_path / "bioskills"       # does NOT exist yet
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()) as mock_git, \
-         patch("dotfiles.claude_skills._discover_skills", return_value=[]):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()) as mock_git, \
+         patch("dotfiles.agent_skills._discover_skills", return_value=[]):
         run_skills_setup(RESOURCES, groups=["default"], cache_dir=cache, target_dir=target)
 
     clone_calls = [
@@ -344,9 +405,9 @@ def test_subsequent_run_pulls_not_clones(tmp_path):
     cache  = _fake_skill_tree(tmp_path, [])
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()) as mock_git, \
-         patch("dotfiles.claude_skills._discover_skills", return_value=[]):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()) as mock_git, \
+         patch("dotfiles.agent_skills._discover_skills", return_value=[]):
         run_skills_setup(RESOURCES, groups=["default"], cache_dir=cache, target_dir=target)
 
     clone_calls = [c for c in mock_git.call_args_list if c.args[0][0] == "clone"]
@@ -358,15 +419,15 @@ def test_subsequent_run_pulls_not_clones(tmp_path):
 # ── run_skills_setup — file copying ──────────────────────────────────────────
 
 def test_skills_copied_with_correct_names(tmp_path):
-    """SKILL.md files are copied as bio-<category>-<skill>.md."""
+    """Skills use the portable bio-<category>-<skill>/SKILL.md layout."""
     cache = _fake_skill_tree(tmp_path, [
         ("single-cell", "clustering", "# clustering skill"),
         ("read-qc", "fastp-workflow", "# fastp skill"),
     ])
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -374,18 +435,87 @@ def test_skills_copied_with_correct_names(tmp_path):
             target_dir=target,
         )
 
-    assert (target / "bio-single-cell-clustering.md").exists()
-    assert (target / "bio-read-qc-fastp-workflow.md").exists()
+    assert (target / "bio-single-cell-clustering" / "SKILL.md").is_file()
+    assert (target / "bio-read-qc-fastp-workflow" / "SKILL.md").is_file()
+
+
+def test_skills_are_installed_for_claude_and_codex(tmp_path):
+    cache = _fake_skill_tree(
+        tmp_path,
+        [("single-cell", "clustering", "# clustering skill")],
+    )
+    claude_target = tmp_path / "claude" / "skills"
+    codex_target = tmp_path / "codex" / "skills"
+
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
+        run_skills_setup(
+            RESOURCES,
+            groups=["default"],
+            cache_dir=cache,
+            target_dir=claude_target,
+            codex_target_dir=codex_target,
+        )
+
+    assert (claude_target / "code-ocean-capsule" / "SKILL.md").is_file()
+    assert (codex_target / "code-ocean-capsule" / "SKILL.md").is_file()
+    assert (claude_target / "bio-single-cell-clustering" / "SKILL.md").is_file()
+    assert (codex_target / "bio-single-cell-clustering" / "SKILL.md").is_file()
+
+
+def test_multi_agent_dry_run_writes_neither_target(tmp_path):
+    claude_target = tmp_path / "claude" / "skills"
+    codex_target = tmp_path / "codex" / "skills"
+
+    run_skills_setup(
+        RESOURCES,
+        groups=["default"],
+        cache_dir=tmp_path / "cache",
+        target_dir=claude_target,
+        codex_target_dir=codex_target,
+        dry_run=True,
+    )
+
+    assert not claude_target.exists()
+    assert not codex_target.exists()
+
+
+def test_codex_skill_refuses_non_file_destination(tmp_path):
+    cache = _fake_skill_tree(
+        tmp_path,
+        [("single-cell", "clustering", "# clustering skill")],
+    )
+    claude_target = tmp_path / "claude" / "skills"
+    codex_target = tmp_path / "codex" / "skills"
+    conflict = codex_target / "bio-single-cell-clustering" / "SKILL.md"
+    conflict.mkdir(parents=True)
+
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
+        statuses = run_skills_setup(
+            RESOURCES,
+            groups=["default"],
+            cache_dir=cache,
+            target_dir=claude_target,
+            codex_target_dir=codex_target,
+        )
+
+    codex_status = next(
+        status for status in statuses
+        if status.name == "bio-single-cell-clustering" and not status.installed
+    )
+    assert not codex_status.installed
+    assert "not a regular file" in codex_status.message
 
 
 def test_skill_content_is_preserved(tmp_path):
-    """Content of SKILL.md is faithfully copied to the target."""
+    """Skill body is preserved while metadata name is namespaced."""
     content = "# My Skill\nThis is the skill content."
     cache = _fake_skill_tree(tmp_path, [("single-cell", "clustering", content)])
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -393,8 +523,31 @@ def test_skill_content_is_preserved(tmp_path):
             target_dir=target,
         )
 
-    written = (target / "bio-single-cell-clustering.md").read_text()
-    assert written == content
+    written = (target / "bio-single-cell-clustering" / "SKILL.md").read_text()
+    assert "name: bio-single-cell-clustering" in written
+    assert content in written
+
+
+def test_invalid_external_skill_is_rejected(tmp_path):
+    cache = _fake_skill_tree(
+        tmp_path,
+        [("single-cell", "clustering", "---\nname: clustering\n---\n")],
+    )
+    target = tmp_path / "skills"
+
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
+        statuses = run_skills_setup(
+            RESOURCES,
+            groups=["default"],
+            cache_dir=cache,
+            target_dir=target,
+        )
+
+    failed = next(status for status in statuses if status.name.endswith("clustering"))
+    assert not failed.installed
+    assert "missing skill description" in failed.message
+    assert not (target / "bio-single-cell-clustering" / "SKILL.md").exists()
 
 
 # ── run_skills_setup — idempotency ───────────────────────────────────────────
@@ -404,13 +557,17 @@ def test_unchanged_skills_not_rewritten(tmp_path):
     content = "# clustering"
     cache = _fake_skill_tree(tmp_path, [("single-cell", "clustering", content)])
     target = tmp_path / "skills"
-    target.mkdir()
-    dest = target / "bio-single-cell-clustering.md"
-    dest.write_text(content)
+    dest = target / "bio-single-cell-clustering" / "SKILL.md"
+    dest.parent.mkdir(parents=True)
+    source = cache / "single-cell" / "clustering" / "SKILL.md"
+    expected = source.read_text().replace(
+        "name: clustering", "name: bio-single-cell-clustering", 1
+    )
+    dest.write_text(expected)
     mtime_before = dest.stat().st_mtime_ns
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         statuses = run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -428,12 +585,15 @@ def test_changed_skill_is_updated(tmp_path):
     """If a skill file has new content (after a pull), it is overwritten."""
     cache = _fake_skill_tree(tmp_path, [("single-cell", "clustering", "# new content")])
     target = tmp_path / "skills"
-    target.mkdir()
-    dest = target / "bio-single-cell-clustering.md"
-    dest.write_text("# old content")
+    dest = target / "bio-single-cell-clustering" / "SKILL.md"
+    dest.parent.mkdir(parents=True)
+    dest.write_text(
+        "---\nname: bio-single-cell-clustering\n"
+        "description: Test clustering workflow\n---\n\n# old content\n"
+    )
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         statuses = run_skills_setup(
             RESOURCES,
             groups=["default"],
@@ -443,7 +603,8 @@ def test_changed_skill_is_updated(tmp_path):
 
     clustering = next(s for s in statuses if "clustering" in s.name)
     assert clustering.message == "updated"
-    assert dest.read_text() == "# new content"
+    assert "# new content" in dest.read_text()
+    assert "name: bio-single-cell-clustering" in dest.read_text()
 
 
 # ── run_skills_setup — category filtering ────────────────────────────────────
@@ -457,8 +618,8 @@ def test_only_requested_categories_are_installed(tmp_path):
     target = tmp_path / "skills"
 
     # Only install "single-cell" (via a minimal group)
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         statuses = run_skills_setup(
             RESOURCES,
             groups=["default"],   # default includes single-cell but NOT variant-calling
@@ -467,8 +628,8 @@ def test_only_requested_categories_are_installed(tmp_path):
         )
 
     names = {s.name for s in statuses}
-    assert "bio-single-cell-clustering.md" in names
-    assert "bio-variant-calling-gatk.md" not in names
+    assert "bio-single-cell-clustering" in names
+    assert "bio-variant-calling-gatk" not in names
 
 
 def test_all_group_installs_all_categories(tmp_path):
@@ -480,8 +641,8 @@ def test_all_group_installs_all_categories(tmp_path):
     ])
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         statuses = run_skills_setup(
             RESOURCES,
             groups=["all"],
@@ -490,9 +651,9 @@ def test_all_group_installs_all_categories(tmp_path):
         )
 
     names = {s.name for s in statuses}
-    assert "bio-single-cell-clustering.md" in names
-    assert "bio-variant-calling-gatk.md" in names
-    assert "bio-metagenomics-kraken.md" in names
+    assert "bio-single-cell-clustering" in names
+    assert "bio-variant-calling-gatk" in names
+    assert "bio-metagenomics-kraken" in names
 
 
 # ── run_skills_setup — error handling ────────────────────────────────────────
@@ -501,7 +662,7 @@ def test_git_not_on_path_still_installs_bundled_skills(tmp_path, capsys):
     cache  = tmp_path / "cache"
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value=None):
+    with patch("dotfiles.agent_skills.shutil.which", return_value=None):
         result = run_skills_setup(
             RESOURCES, groups=["default"], cache_dir=cache, target_dir=target
         )
@@ -514,8 +675,8 @@ def test_git_clone_failure_still_installs_bundled_skills(tmp_path, capsys):
     cache  = tmp_path / "cache"
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git",
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git",
                return_value=_make_completed(returncode=1, stderr="fatal: repo not found")):
         result = run_skills_setup(
             RESOURCES, groups=["default"], cache_dir=cache, target_dir=target
@@ -529,8 +690,8 @@ def test_unknown_group_warns_and_continues(tmp_path, capsys):
     cache  = _fake_skill_tree(tmp_path, [])
     target = tmp_path / "skills"
 
-    with patch("dotfiles.claude_skills.shutil.which", return_value="/usr/bin/git"), \
-         patch("dotfiles.claude_skills._run_git", return_value=_make_completed()):
+    with patch("dotfiles.agent_skills.shutil.which", return_value="/usr/bin/git"), \
+         patch("dotfiles.agent_skills._run_git", return_value=_make_completed()):
         result = run_skills_setup(
             RESOURCES,
             groups=["nonexistent-group"],
@@ -550,12 +711,15 @@ def test_check_statuses_empty_when_dir_missing(tmp_path):
     assert result == []
 
 
-def test_check_statuses_counts_bio_files(tmp_path):
+def test_check_statuses_counts_bio_skills(tmp_path):
     target = tmp_path / "skills"
-    target.mkdir()
-    (target / "bio-single-cell-clustering.md").write_text("x")
-    (target / "bio-read-qc-fastp-workflow.md").write_text("x")
-    (target / "something-else.md").write_text("x")  # not a bio-* file, should be ignored
+    for name in ("bio-single-cell-clustering", "bio-read-qc-fastp-workflow"):
+        skill = target / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: Test skill\n---\n",
+            encoding="utf-8",
+        )
 
     result = check_skill_statuses(target)
     assert len(result) == 2
@@ -563,13 +727,15 @@ def test_check_statuses_counts_bio_files(tmp_path):
 
 
 def test_check_statuses_derives_category(tmp_path):
-    target = tmp_path / "skills"
-    target.mkdir()
-    (target / "bio-single-cell-clustering.md").write_text("x")
+    skill = tmp_path / "skills" / "bio-single-cell-clustering"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: bio-single-cell-clustering\ndescription: Test skill\n---\n"
+    )
 
-    result = check_skill_statuses(target)
+    result = check_skill_statuses(tmp_path / "skills")
     assert len(result) == 1
-    assert result[0].category == "single"   # "bio-single-cell-clustering" → parts[1]
+    assert result[0].category == "bioinformatics"
 
 
 def test_check_statuses_does_not_raise_on_empty_dir(tmp_path):
@@ -587,3 +753,20 @@ def test_check_statuses_includes_managed_first_party_skill(tmp_path):
     result = check_skill_statuses(target)
 
     assert result == [SkillStatus("example-skill", "first-party", True, "installed")]
+
+
+def test_check_statuses_includes_codex_directory_skill(tmp_path):
+    target = tmp_path / "skills"
+    skill = target / "bio-single-cell-clustering"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: bio-single-cell-clustering\n"
+        "description: Test clustering workflow\n---\n",
+        encoding="utf-8",
+    )
+
+    result = check_skill_statuses(target)
+
+    assert result == [
+        SkillStatus("bio-single-cell-clustering", "bioinformatics", True, "installed")
+    ]

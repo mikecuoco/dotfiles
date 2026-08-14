@@ -1,4 +1,4 @@
-"""Claude Code skill management.
+"""Portable Claude Code and Codex skill management.
 
 Provides idempotent install/check logic for first-party skill directories
 bundled with these dotfiles and bioinformatics skill files sourced from the
@@ -24,6 +24,8 @@ from ._toml import tomllib
 
 _MANAGED_SKILLS_FILE = ".dotfiles-managed-skills.json"
 _SKILL_NAME_RE = re.compile(r"[a-z0-9-]{1,64}")
+_FRONTMATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---(?:\s*\n|\Z)", re.DOTALL)
+_NAME_LINE_RE = re.compile(r"(?m)^name:\s*[^\n]+$")
 
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ class SkillGroupConfig:
 
 @dataclass
 class SkillsConfig:
-    """Top-level configuration loaded from ``claude/skills.toml``."""
+    """Top-level configuration loaded from ``common/agents/skills.toml``."""
 
     repo_url: str
     groups: dict[str, SkillGroupConfig]
@@ -52,14 +54,105 @@ class SkillStatus:
     name: str           # e.g. "bio-single-cell-clustering"
     category: str       # e.g. "single-cell"
     installed: bool
-    message: str        # "installed" | "already installed" | "skipped" | error text
+    message: str        # install/update/removal result or error text
+
+
+@dataclass(frozen=True)
+class SkillMetadata:
+    """Portable Agent Skills metadata used by both Claude Code and Codex."""
+
+    name: str
+    description: str
+
+
+def _unquote_yaml_scalar(value: str) -> str:
+    """Decode the simple quoted or unquoted scalars used by skill metadata."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        quote = value[0]
+        if quote == '"':
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                value = value[1:-1]
+        else:
+            value = value[1:-1].replace("''", "'")
+    return value.strip()
+
+
+def _parse_skill_metadata_text(text: str) -> SkillMetadata:
+    """Parse the portable ``name`` and ``description`` frontmatter fields."""
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
+        raise ValueError("missing YAML frontmatter")
+
+    values: dict[str, str] = {}
+    lines = match.group("body").splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if line.startswith((" ", "\t")) or ":" not in line:
+            index += 1
+            continue
+        key, raw = line.split(":", 1)
+        key = key.strip()
+        raw = raw.strip()
+        if key not in {"name", "description"}:
+            index += 1
+            continue
+        if raw in {"|", ">"}:
+            block: list[str] = []
+            index += 1
+            while index < len(lines) and (
+                not lines[index].strip() or lines[index].startswith((" ", "\t"))
+            ):
+                block.append(lines[index].strip())
+                index += 1
+            values[key] = ("\n" if raw == "|" else " ").join(block).strip()
+            continue
+        values[key] = _unquote_yaml_scalar(raw)
+        index += 1
+
+    name = values.get("name", "")
+    description = values.get("description", "")
+    if not name:
+        raise ValueError("missing skill name")
+    if not _SKILL_NAME_RE.fullmatch(name):
+        raise ValueError(f"invalid skill name: {name!r}")
+    if not description:
+        raise ValueError("missing skill description")
+    return SkillMetadata(name=name, description=description)
+
+
+def _read_skill_metadata(path: Path) -> SkillMetadata:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"cannot read SKILL.md: {exc}") from exc
+    return _parse_skill_metadata_text(text)
+
+
+def _portable_skill_bytes(path: Path, installed_name: str) -> bytes:
+    """Return a validated SKILL.md with its metadata name namespaced."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"cannot read SKILL.md: {exc}") from exc
+    _parse_skill_metadata_text(text)
+    if not _SKILL_NAME_RE.fullmatch(installed_name):
+        raise ValueError(f"invalid installed skill name: {installed_name!r}")
+    if not _NAME_LINE_RE.search(text):
+        raise ValueError("skill name must be a single-line frontmatter field")
+    rendered = _NAME_LINE_RE.sub(f"name: {installed_name}", text, count=1)
+    _parse_skill_metadata_text(rendered)
+    return rendered.encode("utf-8")
 
 
 # ── Config loading ────────────────────────────────────────────────────────────
 
 def load_skills_config(resources_dir: Path) -> SkillsConfig:
-    """Load bioSkills declarations from ``claude/skills.toml``."""
-    path = resources_dir / "claude" / "skills.toml"
+    """Load bioSkills declarations from ``common/agents/skills.toml``."""
+    path = resources_dir / "common" / "agents" / "skills.toml"
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
 
@@ -129,7 +222,7 @@ def _ensure_repo(repo_url: str, cache_dir: Path) -> bool:
 
 def _discover_bundled_skills(resources_dir: Path) -> list[Path]:
     """Return first-party skill directories bundled with the dotfiles."""
-    root = resources_dir / "claude" / "skills"
+    root = resources_dir / "common" / "agents" / "skills"
     if not root.is_dir():
         return []
     return sorted(
@@ -295,19 +388,35 @@ def run_bundled_skills_setup(
     resources_dir: Path,
     target_dir: Optional[Path] = None,
     dry_run: bool = False,
+    quiet: bool = False,
 ) -> list[SkillStatus]:
-    """Install bundled first-party skill directories into Claude Code."""
+    """Install portable bundled skill directories for one agent."""
     if target_dir is None:
         target_dir = Path.home() / ".claude" / "skills"
 
+    sources = _discover_bundled_skills(resources_dir)
+    source_names = {source.name for source in sources}
     registry = _read_managed_skills(target_dir)
     updated_registry = dict(registry)
     statuses: list[SkillStatus] = []
 
-    for source in _discover_bundled_skills(resources_dir):
+    for source in sources:
         name = source.name
         destination = target_dir / name
         managed = name in registry
+
+        try:
+            metadata = _read_skill_metadata(source / "SKILL.md")
+            if metadata.name != name:
+                raise ValueError(
+                    f"folder name {name!r} does not match metadata name {metadata.name!r}"
+                )
+        except ValueError as exc:
+            status = SkillStatus(name, "first-party", False, f"invalid skill: {exc}")
+            statuses.append(status)
+            if not quiet:
+                _print_skill_status(status)
+            continue
 
         if (destination.exists() or destination.is_symlink()) and not managed:
             status = SkillStatus(
@@ -317,7 +426,8 @@ def run_bundled_skills_setup(
                 "conflict: existing skill is not managed by dotfiles",
             )
             statuses.append(status)
-            _print_skill_status(status)
+            if not quiet:
+                _print_skill_status(status)
             continue
 
         if managed and (destination.is_symlink() or (destination.exists() and not destination.is_dir())):
@@ -328,7 +438,8 @@ def run_bundled_skills_setup(
                 "conflict: managed skill path is not a directory",
             )
             statuses.append(status)
-            _print_skill_status(status)
+            if not quiet:
+                _print_skill_status(status)
             continue
 
         source_files = _skill_files(source)
@@ -345,14 +456,16 @@ def run_bundled_skills_setup(
         except OSError as exc:
             status = SkillStatus(name, "first-party", False, f"copy failed: {exc}")
             statuses.append(status)
-            _print_skill_status(status)
+            if not quiet:
+                _print_skill_status(status)
             continue
 
         if dry_run:
             message = "already installed" if action == "unchanged" else f"would {action}"
             status = SkillStatus(name, "first-party", True, message)
             statuses.append(status)
-            _print_skill_status(status)
+            if not quiet:
+                _print_skill_status(status)
             continue
 
         try:
@@ -383,7 +496,48 @@ def run_bundled_skills_setup(
             status = SkillStatus(name, "first-party", True, messages[action])
 
         statuses.append(status)
-        _print_skill_status(status)
+        if not quiet:
+            _print_skill_status(status)
+
+    # Remove bundled skills that this dotfiles version no longer ships. Only
+    # registry-owned files are deleted, so user-created files in the same
+    # directory survive the migration.
+    for name in sorted(set(registry) - source_names):
+        destination = target_dir / name
+
+        if dry_run:
+            status = SkillStatus(name, "first-party", True, "would remove")
+            statuses.append(status)
+            if not quiet:
+                _print_skill_status(status)
+            continue
+
+        try:
+            if destination.is_symlink() or (
+                destination.exists() and not destination.is_dir()
+            ):
+                raise OSError(
+                    f"refusing managed skill path that is not a directory: {destination}"
+                )
+            for rel in registry[name]:
+                obsolete = _validate_destination(destination, rel)
+                if obsolete.is_file() or obsolete.is_symlink():
+                    obsolete.unlink()
+                    _prune_empty_parents(obsolete, destination)
+            if destination.is_dir():
+                try:
+                    destination.rmdir()
+                except OSError:
+                    pass
+            updated_registry.pop(name, None)
+        except OSError as exc:
+            status = SkillStatus(name, "first-party", False, f"remove failed: {exc}")
+        else:
+            status = SkillStatus(name, "first-party", True, "removed")
+
+        statuses.append(status)
+        if not quiet:
+            _print_skill_status(status)
 
     if not dry_run and updated_registry != registry:
         _write_managed_skills(target_dir, updated_registry)
@@ -398,6 +552,7 @@ def run_skills_setup(
     groups: Optional[list[str]] = None,
     cache_dir: Optional[Path] = None,
     target_dir: Optional[Path] = None,
+    codex_target_dir: Optional[Path] = None,
     dry_run: bool = False,
     update: bool = False,
 ) -> list[SkillStatus]:
@@ -408,8 +563,10 @@ def run_skills_setup(
         groups:        list of group names to install (default: ``["default"]``).
         cache_dir:     where to cache the cloned repo
                        (default: ``~/.local/share/dotfiles/bioskills/``).
-        target_dir:    where to write skill files
+        target_dir:    Claude Code skill directory
                        (default: ``~/.claude/skills/``).
+        codex_target_dir: optional Codex destination. Both agents use the
+                       portable ``<name>/SKILL.md`` directory layout.
         dry_run:       report what would be done without making changes.
         update:        force a git pull even when the repo already exists
                        (implicit when calling ``dotfiles skills update``).
@@ -425,6 +582,14 @@ def run_skills_setup(
         target_dir = Path.home() / ".claude" / "skills"
 
     statuses = run_bundled_skills_setup(resources_dir, target_dir, dry_run=dry_run)
+    if codex_target_dir is not None and codex_target_dir != target_dir:
+        statuses.extend(
+            run_bundled_skills_setup(
+                resources_dir,
+                codex_target_dir,
+                dry_run=dry_run,
+            )
+        )
     config = load_skills_config(resources_dir)
 
     # Collect categories for the requested groups.
@@ -469,7 +634,9 @@ def run_skills_setup(
             else ", ".join(sorted(set(categories_to_install)))
         )
         print(f"  [dry] would install skills for: {scope}")
-        print(f"  [dry] target: {target_dir}")
+        print(f"  [dry] Claude target: {target_dir}")
+        if codex_target_dir is not None and codex_target_dir != target_dir:
+            print(f"  [dry] Codex target: {codex_target_dir}")
         return statuses
 
     skills = _discover_skills(cache_dir, categories_to_install)
@@ -487,11 +654,17 @@ def run_skills_setup(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     for category, skill_name, skill_md in skills:
-        dest_name = f"bio-{category}-{skill_name}.md"
-        dest = target_dir / dest_name
+        dest_name = f"bio-{category}-{skill_name}"
+        dest = target_dir / dest_name / "SKILL.md"
         status = _install_one(category, dest_name, skill_md, dest)
         statuses.append(status)
         _print_skill_status(status)
+
+        if codex_target_dir is not None and codex_target_dir != target_dir:
+            codex_dest = codex_target_dir / dest_name / "SKILL.md"
+            status = _install_one(category, dest_name, skill_md, codex_dest)
+            statuses.append(status)
+            _print_skill_status(status)
 
     return statuses
 
@@ -503,13 +676,27 @@ def _install_one(
     dest: Path,
 ) -> SkillStatus:
     """Copy *src* to *dest*, skipping if content is already identical."""
-    src_bytes = src.read_bytes()
+    try:
+        src_bytes = _portable_skill_bytes(src, dest_name)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        return SkillStatus(dest_name, category, False, f"copy failed: {exc}")
 
     if dest.exists():
-        if dest.read_bytes() == src_bytes:
-            return SkillStatus(dest_name, category, True, "already installed")
-        # Content changed (e.g. after a git pull) — overwrite.
-        dest.write_bytes(src_bytes)
+        if not dest.is_file():
+            return SkillStatus(
+                dest_name,
+                category,
+                False,
+                "copy failed: destination is not a regular file",
+            )
+        try:
+            if dest.read_bytes() == src_bytes:
+                return SkillStatus(dest_name, category, True, "already installed")
+            # Content changed (e.g. after a git pull) — overwrite.
+            dest.write_bytes(src_bytes)
+        except OSError as exc:
+            return SkillStatus(dest_name, category, False, f"copy failed: {exc}")
         return SkillStatus(dest_name, category, True, "updated")
 
     try:
@@ -548,20 +735,40 @@ def check_skill_statuses(target_dir: Optional[Path] = None) -> list[SkillStatus]
     statuses: list[SkillStatus] = []
     for name in sorted(_read_managed_skills(target_dir)):
         skill_md = target_dir / name / "SKILL.md"
+        try:
+            metadata = _read_skill_metadata(skill_md)
+        except ValueError as exc:
+            statuses.append(
+                SkillStatus(name, "first-party", False, f"invalid skill: {exc}")
+            )
+            continue
+        installed = metadata.name == name
         statuses.append(
             SkillStatus(
                 name,
                 "first-party",
-                skill_md.is_file(),
-                "installed" if skill_md.is_file() else "missing SKILL.md",
+                installed,
+                "installed" if installed else "metadata name does not match directory",
             )
         )
 
-    for skill_file in sorted(target_dir.glob("bio-*.md")):
-        name = skill_file.stem           # e.g. "bio-single-cell-clustering"
-        # Derive category from the second hyphen-separated segment (bio-<cat>-<skill>)
-        parts = name.split("-", 2)       # ["bio", "<cat>", "<skill-with-hyphens>"]
-        category = parts[1] if len(parts) >= 2 else "unknown"
-        statuses.append(SkillStatus(name, category, True, "installed"))
+    for skill_file in sorted(target_dir.glob("bio-*/SKILL.md")):
+        name = skill_file.parent.name
+        try:
+            metadata = _read_skill_metadata(skill_file)
+        except ValueError as exc:
+            statuses.append(
+                SkillStatus(name, "bioinformatics", False, f"invalid skill: {exc}")
+            )
+            continue
+        installed = metadata.name == name
+        statuses.append(
+            SkillStatus(
+                name,
+                "bioinformatics",
+                installed,
+                "installed" if installed else "metadata name does not match directory",
+            )
+        )
 
     return statuses

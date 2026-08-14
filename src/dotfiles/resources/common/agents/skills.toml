@@ -1,8 +1,9 @@
-# claude/skills.toml — GPTomics bioSkills configuration.
+# common/agents/skills.toml — shared agent skill configuration.
 #
 # Declares which GPTomics bioSkills categories to install alongside the
-# first-party directories bundled under claude/skills/. GPTomics skills are
-# fetched and copied as standalone markdown files (bio-<category>-<skill>.md).
+# first-party directories bundled under common/agents/skills/. GPTomics skills
+# are fetched and installed for both Claude Code and Codex using the portable
+# bio-<category>-<skill>/SKILL.md directory layout.
 #
 # Usage:
 #   dotfiles skills install                    # bundled + default GPTomics group
@@ -53,7 +54,7 @@ categories = [
 # ── All group ─────────────────────────────────────────────────────────────────
 # Install every available bioSkills category (561 skills across 63 categories).
 # Install with: dotfiles skills install --with all
-# Note: installs to ~/.claude/skills/ — large context footprint.
+# Note: installs to ~/.claude/skills/ and ~/.agents/skills/ — large context footprint.
 [groups.all]
 description = "All 63 bioSkills categories (561 skills)"
 categories = []   # empty list = no category filter, installs everything

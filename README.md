@@ -41,8 +41,10 @@ python -m pip install git+https://github.com/mikecuoco/dotfiles.git
 
 - [CLI reference](docs/cli-reference.md) — install, update, checks, profiles, and context budgets.
 - [Profiles and configuration](docs/configuration.md) — detection, installed files, overlays, and merge behavior.
-- [Claude Code integrations and skills](docs/claude-tools.md) — plugins, MCP servers, skills, and authentication.
+- [Agent skills](docs/agent-skills.md) — shared Claude Code and Codex skills.
+- [Claude Code integrations](docs/claude-tools.md) — plugins, MCP servers, and authentication.
 - [Agent context architecture](docs/agent-context.md) — shared Claude/Codex instructions and context policy.
+- [Shared project memory](docs/project-memory.md) — local, cross-agent project discoveries and validation.
 
 ## Development
 

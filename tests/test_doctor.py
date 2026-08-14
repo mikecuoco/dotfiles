@@ -19,6 +19,12 @@ def installed_home(tmp_path):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def isolate_plugin_checks(monkeypatch):
+    """Doctor unit tests must not call a live Claude CLI or plugin registry."""
+    monkeypatch.setattr("dotfiles.doctor.check_plugin_statuses", lambda resources: [])
+
+
 def test_doctor_exits_zero_after_install(installed_home, capsys):
     with patch("dotfiles.doctor.Path.home", return_value=installed_home):
         code = run_doctor()
@@ -48,6 +54,7 @@ def test_doctor_json_mode(installed_home, capsys):
     assert "dotfiles" in data
     assert "tools" in data
     assert "auth" in data
+    assert "project_memory" in data
 
 
 def test_doctor_no_secrets_in_output(installed_home, capsys):
@@ -107,3 +114,88 @@ def test_doctor_accepts_generated_and_merged_codeocean_files(tmp_path, capsys):
     assert files[".codex/config.toml"]["message"] == "merged"
     assert files[".claude.json"]["ok"] is True
     assert files[".claude.json"]["message"] == "merged"
+
+
+def test_doctor_recognizes_documented_codeocean_runtime_signal(tmp_path, capsys):
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    capsys.readouterr()
+
+    with patch.dict(os.environ, {"CO_CAPSULE_ID": "capsule-id"}, clear=True), \
+         patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
+        code = run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert report["platform"]["name"] == "codeocean"
+    assert report["platform"]["signals"] == ["CO_CAPSULE_ID set"]
+
+
+def test_doctor_uses_installed_codeocean_profile_without_runtime_signal(
+    tmp_path, capsys
+):
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    capsys.readouterr()
+
+    with patch.dict(os.environ, {}, clear=True), \
+         patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"), \
+         patch("dotfiles.platform.platform.system", return_value="Linux"), \
+         patch("dotfiles.platform.socket.gethostname", return_value="afff5427898f"):
+        code = run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert report["platform"] == {
+        "name": "codeocean",
+        "os": "Linux",
+        "hostname": "afff5427898f",
+        "signals": ["installed profile=codeocean"],
+    }
+
+
+def test_doctor_detects_modified_generated_instructions(tmp_path, capsys):
+    run_install(profile="codespace", dry_run=False, home=tmp_path)
+    (tmp_path / ".codex" / "AGENTS.md").write_text("stale\n")
+    capsys.readouterr()
+
+    with patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
+        code = run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    files = {item["path"]: item for item in report["dotfiles"]["files"]}
+    assert code == 1
+    assert files[".codex/AGENTS.md"] == {
+        "path": ".codex/AGENTS.md",
+        "ok": False,
+        "message": "generated content differs",
+    }
+
+
+def test_doctor_fails_for_unignored_project_memory(
+    installed_home, tmp_path, monkeypatch, capsys
+):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".agents" / "memory").mkdir(parents=True)
+    monkeypatch.setattr("dotfiles.project_memory._is_git_ignored", lambda *args: False)
+
+    with patch("dotfiles.doctor.Path.home", return_value=installed_home), \
+         patch("dotfiles.doctor.Path.cwd", return_value=repo), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
+        code = run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert any(
+        check["message"] == "not ignored by Git"
+        for check in report["project_memory"]["checks"]
+    )

@@ -10,9 +10,11 @@ from typing import Optional
 
 from .auth import AuthStatus, all_statuses
 from .claude_plugins import PluginStatus, check_plugin_statuses
-from .claude_skills import SkillStatus, check_skill_statuses
+from .agent_skills import SkillStatus, check_skill_statuses
 from .install import get_resources_dir, read_state
 from .platform import PlatformInfo, detect_platform
+from .project_memory import MemoryStatus, check_project_memory, find_repo_root
+from .profiles import load_profiles, resolve_links
 
 
 # Tools to check — split into required and optional
@@ -48,8 +50,11 @@ class DoctorReport:
     # Claude plugin sections — populated only when `claude` CLI is on PATH
     claude_plugin_statuses: list[PluginStatus] = field(default_factory=list)
     bio_plugin_statuses: list[PluginStatus] = field(default_factory=list)
-    # Claude skills section — first-party managed directories and bio-* files
+    # Agent skills — first-party managed directories and bio-* files
     skill_statuses: list[SkillStatus] = field(default_factory=list)
+    codex_skill_statuses: list[SkillStatus] = field(default_factory=list)
+    project_memory_root: Optional[str] = None
+    project_memory_statuses: list[MemoryStatus] = field(default_factory=list)
 
 
 def run_doctor(as_json: bool = False) -> int:
@@ -58,6 +63,22 @@ def run_doctor(as_json: bool = False) -> int:
     resources = get_resources_dir()
     platform_info = detect_platform()
     state = read_state(home)
+
+    # Some deployed containers omit their platform's usual runtime variables.
+    # A specialized profile saved by an explicit install is better evidence
+    # than the generic Linux fallback in that case.
+    if (
+        state
+        and platform_info.platform == "linux"
+        and state.get("profile") in {"cluster", "codeocean", "codespace"}
+    ):
+        installed_profile = state["profile"]
+        platform_info = PlatformInfo(
+            installed_profile,
+            platform_info.os_name,
+            platform_info.hostname,
+            [f"installed profile={installed_profile}"],
+        )
 
     report = DoctorReport(
         platform=platform_info,
@@ -69,17 +90,44 @@ def run_doctor(as_json: bool = False) -> int:
     if state:
         generated = set(state.get("generated", []))
         merged = set(state.get("merged", []))
+        expected_generated: dict[str, str] = {}
+        try:
+            active_links = resolve_links(state["profile"], load_profiles(resources))
+            bases = {link.dst: link for link in active_links if link.mode == "link"}
+            appends: dict[str, list] = {}
+            for link in active_links:
+                if link.mode == "append":
+                    appends.setdefault(link.dst, []).append(link)
+            for dst_rel, extra_links in appends.items():
+                if dst_rel not in bases:
+                    continue
+                sources = [bases[dst_rel], *extra_links]
+                expected_generated[dst_rel] = "\n\n".join(
+                    (resources / link.src).read_text() for link in sources
+                )
+        except (KeyError, OSError, ValueError):
+            expected_generated = {}
+
         for dst_rel, src_rel in state["links"].items():
             dst = home / dst_rel
             src = resources / src_rel
-            if dst_rel in generated or dst_rel in merged:
-                kind = "generated" if dst_rel in generated else "merged"
+            if dst_rel in generated:
+                regular = dst.is_file() and not dst.is_symlink()
+                expected = expected_generated.get(dst_rel)
+                matches = regular and expected is not None and dst.read_text() == expected
                 report.file_statuses.append(
                     FileStatus(
                         dst_rel,
-                        dst.is_file() and not dst.is_symlink(),
-                        kind if dst.is_file() and not dst.is_symlink() else "missing",
+                        matches,
+                        "generated" if matches else (
+                            "generated content differs" if regular else "missing"
+                        ),
                     )
+                )
+            elif dst_rel in merged:
+                regular = dst.is_file() and not dst.is_symlink()
+                report.file_statuses.append(
+                    FileStatus(dst_rel, regular, "merged" if regular else "missing")
                 )
             elif dst.is_symlink():
                 try:
@@ -126,9 +174,15 @@ def run_doctor(as_json: bool = False) -> int:
         if not _is_default_plugin(s, resources)
     ]
 
-    # ── Claude skill checks ───────────────────────────────────────────────────
+    # ── Agent skill checks ────────────────────────────────────────────────────
     # Non-fatal: warn if none are installed; not an error for exit-code purposes.
     report.skill_statuses = check_skill_statuses(home / ".claude" / "skills")
+    report.codex_skill_statuses = check_skill_statuses(home / ".agents" / "skills")
+
+    # ── Shared project memory ────────────────────────────────────────────────
+    memory_root = find_repo_root(Path.cwd())
+    report.project_memory_root = str(memory_root)
+    report.project_memory_statuses = check_project_memory(memory_root)
 
     # ── Output ──────────────────────────────────────────────────────────────
     if as_json:
@@ -144,8 +198,16 @@ def run_doctor(as_json: bool = False) -> int:
     missing_required_auth = any(
         not a.configured for a in report.auth_statuses if a.required
     )
+    broken_project_memory = any(
+        not status.ok for status in report.project_memory_statuses
+    )
 
-    if not report.dotfiles_ok or broken_files or missing_required_tools:
+    if (
+        not report.dotfiles_ok
+        or broken_files
+        or missing_required_tools
+        or broken_project_memory
+    ):
         return 1
     if missing_required_auth:
         return 1
@@ -224,16 +286,33 @@ def _emit_human(report: DoctorReport) -> None:
         for ps in report.bio_plugin_statuses:
             _print_plugin_status(ps, ok, warn, fail)
 
-    print("\nClaude skills")
-    if not report.skill_statuses:
-        print(warn("no managed skills installed — run: dotfiles skills install"))
-    else:
-        from collections import Counter
-        by_cat = Counter(s.category for s in report.skill_statuses)
-        total = len(report.skill_statuses)
+    from collections import Counter
+    for label, statuses in (
+        ("Claude Code skills", report.skill_statuses),
+        ("Codex skills", report.codex_skill_statuses),
+    ):
+        print(f"\n{label}")
+        if not statuses:
+            print(warn("no managed skills installed — run: dotfiles install"))
+            continue
+        by_cat = Counter(s.category for s in statuses)
+        total = len(statuses)
         print(ok(f"{total} skill(s) installed across {len(by_cat)} category(ies)"))
         for cat, count in sorted(by_cat.items()):
             print(f"      {cat:<28} {count}")
+
+    print("\nProject memory")
+    print(f"      root: {report.project_memory_root}")
+    for status in report.project_memory_statuses:
+        message = f"{status.path}: {status.message}"
+        if status.level == "error":
+            print(fail(message))
+        elif status.level == "warning":
+            print(warn(message))
+        elif status.level == "info":
+            print(warn(message))
+        else:
+            print(ok(message))
 
     print()
 
@@ -314,5 +393,26 @@ def _emit_json(report: DoctorReport) -> None:
             }
             for s in report.skill_statuses
         ],
+        "codex_skills": [
+            {
+                "name": s.name,
+                "category": s.category,
+                "installed": s.installed,
+                "message": s.message,
+            }
+            for s in report.codex_skill_statuses
+        ],
+        "project_memory": {
+            "root": report.project_memory_root,
+            "checks": [
+                {
+                    "path": status.path,
+                    "level": status.level,
+                    "ok": status.ok,
+                    "message": status.message,
+                }
+                for status in report.project_memory_statuses
+            ],
+        },
     }
     print(json.dumps(data, indent=2))

@@ -130,6 +130,30 @@ def test_agent_config_directories_created(fake_home):
         instructions = fake_home / relative
         assert instructions.exists()
         assert not instructions.is_symlink()
+        assert ".agents/memory/" in instructions.read_text()
+
+    global_ignore = (fake_home / ".gitignore").read_text()
+    assert ".agents/memory/" in global_ignore
+    assert ".claude/memory/" not in global_ignore
+    assert ".codex/memories/" not in global_ignore
+
+
+def test_install_does_not_create_project_memory_in_home(fake_home):
+    run_install(profile="codespace", dry_run=False, home=fake_home)
+
+    assert not (fake_home / ".agents" / "memory").exists()
+
+
+def test_first_party_skills_install_for_both_agents(fake_home):
+    run_install(profile="codespace", dry_run=False, home=fake_home)
+
+    for root in (fake_home / ".claude" / "skills", fake_home / ".agents" / "skills"):
+        for name in (
+            "code-ocean-capsule",
+            "jupyter-workflow",
+            "scientific-plotting",
+        ):
+            assert (root / name / "SKILL.md").is_file()
 
 
 def test_dry_run_does_not_write_state(fake_home):

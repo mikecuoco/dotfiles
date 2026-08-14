@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Ocean Capsule"
+  short_description: "Organize and finalize Code Ocean capsules"
+  default_prompt: "Use $code-ocean-capsule to review and improve this Code Ocean capsule at its current development stage."
