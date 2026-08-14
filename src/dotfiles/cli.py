@@ -46,6 +46,27 @@ def main() -> None:
         help="Override home directory (useful for testing)",
     )
 
+    # ── update ───────────────────────────────────────────────────────────────
+    p_update = sub.add_parser(
+        "update",
+        help="Upgrade dotfiles from GitHub and apply the active profile",
+    )
+    p_update.add_argument(
+        "--profile", "-p",
+        metavar="PROFILE",
+        help="Profile to apply after updating (auto-detected if omitted)",
+    )
+    p_update.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="Show the update and install commands without running them",
+    )
+    p_update.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress routine output while applying dotfiles",
+    )
+
     # ── doctor ───────────────────────────────────────────────────────────────
     p_doctor = sub.add_parser(
         "doctor",
@@ -171,6 +192,13 @@ def main() -> None:
             quiet=args.quiet,
         )
         sys.exit(0 if ok else 1)
+    elif args.command == "update":
+        from .update import run_update
+        sys.exit(run_update(
+            profile=args.profile,
+            dry_run=args.dry_run,
+            quiet=args.quiet,
+        ))
     elif args.command == "doctor":
         from .doctor import run_doctor
         sys.exit(run_doctor(as_json=args.json))

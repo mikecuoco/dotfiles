@@ -32,3 +32,25 @@ def test_install_quiet_flag(monkeypatch, extra_args, expected_quiet):
 
     assert exit_info.value.code == 0
     assert received["quiet"] is expected_quiet
+
+
+def test_update_forwards_options(monkeypatch):
+    received = {}
+
+    def fake_run_update(**kwargs):
+        received.update(kwargs)
+        return 0
+
+    from dotfiles import update
+    monkeypatch.setattr(update, "run_update", fake_run_update)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["dotfiles", "update", "--profile", "linux", "--dry-run", "--quiet"],
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 0
+    assert received == {"profile": "linux", "dry_run": True, "quiet": True}

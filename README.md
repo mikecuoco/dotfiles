@@ -17,6 +17,9 @@ pip install -e .
 # Install dotfiles for the detected platform
 dotfiles install
 
+# Upgrade dotfiles from GitHub and apply the latest configuration
+dotfiles update
+
 # Preview changes without touching anything
 dotfiles install --dry-run
 
@@ -28,6 +31,7 @@ dotfiles install --quiet
 
 ```
 dotfiles install   [-p PROFILE] [-n/--dry-run] [-q/--quiet] [--home DIR]
+dotfiles update    [-p PROFILE] [-n/--dry-run] [-q/--quiet]
 dotfiles doctor    [--json]
 dotfiles status
 dotfiles auth
@@ -39,6 +43,7 @@ dotfiles skills     install|update|status [--with GROUP]
 | Command | What it does |
 |---|---|
 | `install` | Verbosely install dotfiles for the active (or specified) profile; `-q` suppresses routine output |
+| `update` | Upgrade the dotfiles package from GitHub, then reapply the active (or specified) profile |
 | `doctor` | Check that all installed symlinks and generated files are healthy |
 | `status` | Show what's currently installed and which profile is active |
 | `auth` | Report authentication status (Anthropic, GitHub, AWS, Mem0) |
