@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.8"
 # dependencies = ["ruamel.yaml>=0.18,<0.19"]
 # ///
 """Refresh a capsule's dataset manifest from Code Ocean attachment metadata.
@@ -346,7 +346,10 @@ def _atomic_write(path: Path, content: str) -> None:
             stream.write(content)
         temp_path.replace(path)
     except BaseException:
-        temp_path.unlink(missing_ok=True)
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
         raise
 
 

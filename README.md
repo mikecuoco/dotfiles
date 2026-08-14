@@ -2,6 +2,8 @@
 
 A cross-platform dotfiles manager for macOS, Linux, HPC clusters, GitHub Codespaces, and Code Ocean — packaged as a Python CLI so installation is a single command anywhere Python is available.
 
+Requires Python 3.8 or newer.
+
 ## Quick start
 
 ```bash

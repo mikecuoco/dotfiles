@@ -160,103 +160,92 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    match args.command:
-        case "install":
-            from pathlib import Path
-            from .install import run_install
-            home = Path(args.home) if args.home else None
-            ok = run_install(
-                profile=args.profile,
-                dry_run=args.dry_run,
-                home=home,
-                quiet=args.quiet,
-            )
-            sys.exit(0 if ok else 1)
+    if args.command == "install":
+        from pathlib import Path
+        from .install import run_install
+        home = Path(args.home) if args.home else None
+        ok = run_install(
+            profile=args.profile,
+            dry_run=args.dry_run,
+            home=home,
+            quiet=args.quiet,
+        )
+        sys.exit(0 if ok else 1)
+    elif args.command == "doctor":
+        from .doctor import run_doctor
+        sys.exit(run_doctor(as_json=args.json))
+    elif args.command == "auth":
+        from .auth import run_auth
+        sys.exit(run_auth())
+    elif args.command == "status":
+        from .install import run_status
+        sys.exit(run_status())
+    elif args.command == "profiles":
+        _list_profiles()
+    elif args.command in ("agent-stats", "claude-stats"):
+        from .claude_stats import run_agent_stats
+        sys.exit(run_agent_stats())
+    elif args.command == "skills":
+        from pathlib import Path
+        from . import RESOURCES_DIR
+        from .claude_skills import run_skills_setup, check_skill_statuses
 
-        case "doctor":
-            from .doctor import run_doctor
-            sys.exit(run_doctor(as_json=args.json))
+        cache_dir = Path.home() / ".local" / "share" / "dotfiles" / "bioskills"
+        target_dir = Path.home() / ".claude" / "skills"
 
-        case "auth":
-            from .auth import run_auth
-            sys.exit(run_auth())
-
-        case "status":
-            from .install import run_status
-            sys.exit(run_status())
-
-        case "profiles":
-            _list_profiles()
-
-        case "agent-stats" | "claude-stats":
-            from .claude_stats import run_agent_stats
-            sys.exit(run_agent_stats())
-
-        case "skills":
-            from pathlib import Path
-            from . import RESOURCES_DIR
-            from .claude_skills import run_skills_setup, check_skill_statuses
-
-            cache_dir  = Path.home() / ".local" / "share" / "dotfiles" / "bioskills"
-            target_dir = Path.home() / ".claude" / "skills"
-
-            match args.skills_command:
-                case "install":
-                    groups = ["default"] + (args.extra_groups or [])
-                    statuses = run_skills_setup(
-                        resources_dir=RESOURCES_DIR,
-                        groups=groups,
-                        cache_dir=cache_dir,
-                        target_dir=target_dir,
-                        dry_run=args.dry_run,
-                    )
-                    failed = [s for s in statuses if not s.installed and not args.dry_run]
-                    sys.exit(1 if failed else 0)
-
-                case "update":
-                    # Re-pull and refresh; re-uses run_skills_setup which always pulls
-                    # when .git already exists.
-                    from dotfiles.claude_skills import load_skills_config
-                    cfg = load_skills_config(RESOURCES_DIR)
-                    all_groups = list(cfg.groups)
-                    statuses = run_skills_setup(
-                        resources_dir=RESOURCES_DIR,
-                        groups=all_groups,
-                        cache_dir=cache_dir,
-                        target_dir=target_dir,
-                        dry_run=args.dry_run,
-                        update=True,
-                    )
-                    failed = [s for s in statuses if not s.installed and not args.dry_run]
-                    sys.exit(1 if failed else 0)
-
-                case "status":
-                    statuses = check_skill_statuses(target_dir)
-                    total = len(statuses)
-                    if total == 0:
-                        print("  – no managed skills installed in ~/.claude/skills/")
-                        print("    Run: dotfiles skills install")
-                    else:
-                        from collections import Counter
-                        by_cat = Counter(s.category for s in statuses)
-                        print(f"  {total} Claude Code skill(s) found in {target_dir}")
-                        for cat, count in sorted(by_cat.items()):
-                            print(f"    {cat:<30} {count}")
-                    sys.exit(0)
-
-        case "claude":
-            from . import RESOURCES_DIR
-            from .claude_plugins import run_claude_setup
+        if args.skills_command == "install":
             groups = ["default"] + (args.extra_groups or [])
-            statuses = run_claude_setup(
+            statuses = run_skills_setup(
                 resources_dir=RESOURCES_DIR,
                 groups=groups,
+                cache_dir=cache_dir,
+                target_dir=target_dir,
                 dry_run=args.dry_run,
             )
-            # Non-zero exit if any integration failed outright (not auth-only)
-            failed = [s for s in statuses if not s.installed and not args.dry_run
-                      and not s.message.startswith("command not found")]
+            failed = [s for s in statuses if not s.installed and not args.dry_run]
             sys.exit(1 if failed else 0)
+        elif args.skills_command == "update":
+            # Re-pull and refresh; re-uses run_skills_setup which always pulls
+            # when .git already exists.
+            from dotfiles.claude_skills import load_skills_config
+            cfg = load_skills_config(RESOURCES_DIR)
+            all_groups = list(cfg.groups)
+            statuses = run_skills_setup(
+                resources_dir=RESOURCES_DIR,
+                groups=all_groups,
+                cache_dir=cache_dir,
+                target_dir=target_dir,
+                dry_run=args.dry_run,
+                update=True,
+            )
+            failed = [s for s in statuses if not s.installed and not args.dry_run]
+            sys.exit(1 if failed else 0)
+        elif args.skills_command == "status":
+            statuses = check_skill_statuses(target_dir)
+            total = len(statuses)
+            if total == 0:
+                print("  – no managed skills installed in ~/.claude/skills/")
+                print("    Run: dotfiles skills install")
+            else:
+                from collections import Counter
+                by_cat = Counter(s.category for s in statuses)
+                print(f"  {total} Claude Code skill(s) found in {target_dir}")
+                for cat, count in sorted(by_cat.items()):
+                    print(f"    {cat:<30} {count}")
+            sys.exit(0)
+    elif args.command == "claude":
+        from . import RESOURCES_DIR
+        from .claude_plugins import run_claude_setup
+        groups = ["default"] + (args.extra_groups or [])
+        statuses = run_claude_setup(
+            resources_dir=RESOURCES_DIR,
+            groups=groups,
+            dry_run=args.dry_run,
+        )
+        # Non-zero exit if any integration failed outright (not auth-only)
+        failed = [s for s in statuses if not s.installed and not args.dry_run
+                  and not s.message.startswith("command not found")]
+        sys.exit(1 if failed else 0)
 
 
 def _list_profiles() -> None:

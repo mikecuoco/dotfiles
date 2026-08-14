@@ -1,12 +1,14 @@
 """Tests for the safe, idempotent installer."""
+from __future__ import annotations
+
 import json
 import os
-import tomllib
 from pathlib import Path
 
 import pytest
 
 from dotfiles.install import run_install, read_state, get_resources_dir
+from dotfiles._toml import tomllib
 
 
 @pytest.fixture()

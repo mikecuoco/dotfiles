@@ -276,8 +276,9 @@ def test_setup_installs_missing_plugin(capsys):
         c.args[0] for c in mock_run.call_args_list
         if c.args[0][:2] == ["plugin", "install"]
     ]
-    # github, pubmed, synapse, pyright-lsp should each get an install call
-    assert len(install_calls) >= 4
+    # Synapse requires ~/.synapseConfig, so it is skipped when that optional
+    # local configuration is absent. The remaining plugin integrations install.
+    assert len(install_calls) >= 3
 
 
 def test_setup_idempotent(capsys):

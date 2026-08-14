@@ -1,4 +1,5 @@
 """Tests for command-line argument wiring."""
+from __future__ import annotations
 
 import sys
 

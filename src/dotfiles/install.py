@@ -6,13 +6,13 @@ import os
 import subprocess
 import sys
 import tempfile
-import tomllib
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
+from ._toml import tomllib
 from .profiles import LinkSpec, load_profiles, resolve_links
 from .platform import detect_platform
 
@@ -367,7 +367,10 @@ def _install_json_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
         os.replace(temporary, dst)
     except OSError as exc:
         if temporary is not None:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
         return _Report(Result.ERROR, dst, src, error=f"JSON merge failed: {exc}")
 
     return _Report(Result.MERGED, dst, src)
@@ -479,7 +482,10 @@ def _install_toml_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
         os.replace(temporary, dst)
     except OSError as exc:
         if temporary is not None:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
         return _Report(Result.ERROR, dst, src, error=f"TOML merge failed: {exc}")
 
     return _Report(Result.MERGED, dst, src)
@@ -496,20 +502,19 @@ def _print_line(rpt: _Report, *, quiet: bool = False) -> None:
     except ValueError:
         display = str(rpt.dst)
 
-    match rpt.result:
-        case Result.UNCHANGED:
-            print(f"  ✓ ~/{display}")
-        case Result.LINKED:
-            print(f"  → ~/{display}")
-        case Result.BACKED_UP_AND_LINKED:
-            print(f"  → ~/{display}  (backed up: {rpt.backup.name})")
-        case Result.MERGED:
-            print(f"  + ~/{display}  (merged defaults)")
-        case Result.DRY:
-            bak = f"  (would back up: {rpt.backup.name})" if rpt.backup else ""
-            print(f"  [dry] → ~/{display}{bak}")
-        case Result.ERROR:
-            print(f"  ✗ ~/{display}  ERROR: {rpt.error}", file=sys.stderr)
+    if rpt.result == Result.UNCHANGED:
+        print(f"  ✓ ~/{display}")
+    elif rpt.result == Result.LINKED:
+        print(f"  → ~/{display}")
+    elif rpt.result == Result.BACKED_UP_AND_LINKED:
+        print(f"  → ~/{display}  (backed up: {rpt.backup.name})")
+    elif rpt.result == Result.MERGED:
+        print(f"  + ~/{display}  (merged defaults)")
+    elif rpt.result == Result.DRY:
+        bak = f"  (would back up: {rpt.backup.name})" if rpt.backup else ""
+        print(f"  [dry] → ~/{display}{bak}")
+    else:
+        print(f"  ✗ ~/{display}  ERROR: {rpt.error}", file=sys.stderr)
 
 
 def _write_state(

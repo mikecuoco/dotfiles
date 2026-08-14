@@ -1,4 +1,6 @@
 """Tests for authentication checks."""
+from __future__ import annotations
+
 import os
 from unittest.mock import patch, MagicMock
 

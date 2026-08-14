@@ -14,11 +14,12 @@ import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Optional
+
+from ._toml import tomllib
 
 
 _MANAGED_SKILLS_FILE = ".dotfiles-managed-skills.json"

@@ -9,10 +9,11 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from ._toml import tomllib
 
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -298,19 +299,17 @@ def _process_one(
                 spec.auth_hint,
             )
 
-    match spec.type:
-        case "plugin":
-            return _process_plugin(spec, installed_plugins, dry_run)
-        case "mcp-http":
-            return _process_mcp_http(spec, configured_mcps, dry_run)
-        case "mcp-stdio":
-            return _process_mcp_stdio(spec, configured_mcps, dry_run)
-        case _:
-            return PluginStatus(
-                spec.name, spec.type, False,
-                f"unsupported integration type: {spec.type!r}",
-                spec.auth_hint,
-            )
+    if spec.type == "plugin":
+        return _process_plugin(spec, installed_plugins, dry_run)
+    if spec.type == "mcp-http":
+        return _process_mcp_http(spec, configured_mcps, dry_run)
+    if spec.type == "mcp-stdio":
+        return _process_mcp_stdio(spec, configured_mcps, dry_run)
+    return PluginStatus(
+        spec.name, spec.type, False,
+        f"unsupported integration type: {spec.type!r}",
+        spec.auth_hint,
+    )
 
 
 def _process_plugin(
@@ -451,16 +450,15 @@ def check_plugin_statuses(
         if group_name not in config.groups:
             continue
         for spec in config.groups[group_name].integrations:
-            match spec.type:
-                case "plugin":
-                    ref = f"{spec.name}@{spec.marketplace}"
-                    is_ok = ref in installed_plugins
-                    msg   = "installed" if is_ok else "not installed"
-                case "mcp-http" | "mcp-stdio":
-                    is_ok = spec.name in configured_mcps
-                    msg   = "configured" if is_ok else "not configured"
-                case _:
-                    is_ok, msg = False, f"unknown type {spec.type!r}"
+            if spec.type == "plugin":
+                ref = f"{spec.name}@{spec.marketplace}"
+                is_ok = ref in installed_plugins
+                msg = "installed" if is_ok else "not installed"
+            elif spec.type in ("mcp-http", "mcp-stdio"):
+                is_ok = spec.name in configured_mcps
+                msg = "configured" if is_ok else "not configured"
+            else:
+                is_ok, msg = False, f"unknown type {spec.type!r}"
             statuses.append(PluginStatus(spec.name, spec.type, is_ok, msg, spec.auth_hint))
 
     return statuses

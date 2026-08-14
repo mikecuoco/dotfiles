@@ -1,9 +1,10 @@
 """Profile loading and composition for dotfiles."""
 from __future__ import annotations
 
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from ._toml import tomllib
 
 
 VALID_MODES = frozenset({"link", "append", "merge-json", "merge-toml"})

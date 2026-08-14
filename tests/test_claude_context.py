@@ -11,11 +11,11 @@ intentionally tolerant of wording changes but strict about:
 from __future__ import annotations
 
 import json
-import tomllib
 
 import pytest
 
 from dotfiles import RESOURCES_DIR
+from dotfiles._toml import tomllib
 from dotfiles.claude_stats import estimate_tokens, GLOBAL_BUDGET, OVERLAY_BUDGET
 
 # ── helpers ───────────────────────────────────────────────────────────────────
