@@ -58,3 +58,7 @@ fishd.*
 shilocation
 
 **/.claude/settings.local.json
+
+# ── Local agent conversation memories ───────────────────────────────────────
+.claude/memories/
+.codex/memories/

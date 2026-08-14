@@ -24,6 +24,7 @@ SHARED_MD = RESOURCES_DIR / "common" / "agents" / "PREFERENCES.md"
 CLAUDE_MD = RESOURCES_DIR / "common" / "claude" / "CLAUDE.md"
 CODEX_MD = RESOURCES_DIR / "common" / "codex" / "AGENTS.md"
 CODEX_SETTINGS = RESOURCES_DIR / "common" / "codex" / "preferences.toml"
+GLOBAL_GITIGNORE = RESOURCES_DIR / "common" / "git" / ".gitignore"
 CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "agents" / "PREFERENCES.md"
 CODEOCEAN_EXPORTS = RESOURCES_DIR / "codeocean" / "shell" / ".exports.codeocean"
 CLAUDE_SETTINGS = RESOURCES_DIR / "common" / "claude" / "settings.json"
@@ -173,6 +174,17 @@ def test_no_cfg_memory_path_in_global():
         "Shared preferences reference '/cfg/projects', a platform-specific memory path. "
         "Replace with portable memory policy guidance."
     )
+
+
+def test_global_memory_policy_uses_mirrored_local_agent_directories():
+    """Conversation summaries are mirrored in both local agent stores."""
+    text = _global_text()
+    for directory in (".claude/memories/", ".codex/memories/"):
+        assert directory in text
+        assert directory in GLOBAL_GITIGNORE.read_text()
+    assert "every completed conversation" in text
+    assert "Markdown summary" in text
+    assert "in sync" in text
 
 
 def test_no_codeocean_text_in_global():

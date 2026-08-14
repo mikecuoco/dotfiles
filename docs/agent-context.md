@@ -29,7 +29,8 @@ scoped/procedural:
     rules and skills                   retrieved when applicable
 
 learned/temporary:
-    memories, plans, scratch context   conclusions persist; transcripts do not
+    conversation summaries, plans,
+    scratch context                    summaries persist locally; transcripts do not
 ```
 
 The installer generates the two global instruction files from the canonical
@@ -45,7 +46,7 @@ Claude and Codex aligned without putting Claude model names in Codex guidance.
 | Profile overlay | Environment invariants such as filesystem layout and resource limits |
 | Project instructions | Stable conventions every session in that repository needs |
 | Rules and skills | Scoped or procedural knowledge fetched when applicable |
-| Memory | Durable, non-obvious conclusions rather than task transcripts |
+| Conversation memory | Mirrored local Markdown summary per completed conversation, including outcomes and handoff state |
 | Temporary context | Plans, debug notes, and task state that can be discarded |
 
 ## Configuration parity
@@ -70,7 +71,17 @@ is managed separately from preferences.
 
 ## Memory policy
 
-Store conclusions, not transcripts.
+Store concise summaries, not transcripts. At the end of every conversation,
+write one dated, descriptive Markdown file in both project-local memory
+directories:
+
+- Claude: `.claude/memories/`
+- Codex: `.codex/memories/`
+
+Keep matching filenames and contents in the two directories. Record the
+request, decisions, changes, validation, durable lessons, and remaining work.
+These directories are globally Git-ignored: they preserve local continuity but
+must not be committed. Do not include secrets or sensitive data.
 
 **Bad:**
 
@@ -111,11 +122,6 @@ external service.
 
 ## Memory maintenance
 
-A future memory-garbage-collection workflow could remove stale entries, merge
-duplicates, shorten verbose facts, resolve contradictions, promote stable
-project invariants into project documentation, and demote inappropriate global
-instructions.
-
-Until then, periodically prune each tool's memory store manually. External
-memory systems such as Mem0 remain deferred until native memory has been
-evaluated across multiple project types.
+Periodically prune stale or duplicate summaries, shorten verbose entries,
+resolve contradictions, and promote stable project invariants into project
+documentation or instructions.
