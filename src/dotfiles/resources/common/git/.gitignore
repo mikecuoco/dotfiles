@@ -60,5 +60,5 @@ shilocation
 **/.claude/settings.local.json
 
 # ── Local agent conversation memories ───────────────────────────────────────
-.claude/memories/
+.claude/memory/
 .codex/memories/

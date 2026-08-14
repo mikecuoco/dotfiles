@@ -32,5 +32,5 @@ package-lock.json
 .gitconfig.local
 
 # Local agent conversation memories
-.claude/memories/
+.claude/memory/
 .codex/memories/

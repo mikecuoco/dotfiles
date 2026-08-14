@@ -179,7 +179,7 @@ def test_no_cfg_memory_path_in_global():
 def test_global_memory_policy_uses_mirrored_local_agent_directories():
     """Conversation summaries are mirrored in both local agent stores."""
     text = _global_text()
-    for directory in (".claude/memories/", ".codex/memories/"):
+    for directory in (".claude/memory/", ".codex/memories/"):
         assert directory in text
         assert directory in GLOBAL_GITIGNORE.read_text()
     assert "every completed conversation" in text

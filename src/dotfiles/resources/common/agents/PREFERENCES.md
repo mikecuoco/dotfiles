@@ -58,7 +58,7 @@
   project-file facts, secrets, or sensitive data. Update or remove stale or
   conflicting memories.
 - After every completed conversation, create a concise Markdown summary in both
-  repository-local memory directories: `.claude/memories/` and
+  repository-local memory directories: `.claude/memory/` and
   `.codex/memories/`. Keep identical dated, descriptive files in sync.
 - Include the request, decisions, changes, validation, durable lessons, and
   remaining work. Keep these files local and never commit them.

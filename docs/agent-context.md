@@ -75,7 +75,7 @@ Store concise summaries, not transcripts. At the end of every conversation,
 write one dated, descriptive Markdown file in both project-local memory
 directories:
 
-- Claude: `.claude/memories/`
+- Claude: `.claude/memory/`
 - Codex: `.codex/memories/`
 
 Keep matching filenames and contents in the two directories. Record the
