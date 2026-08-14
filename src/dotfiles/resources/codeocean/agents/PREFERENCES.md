@@ -20,18 +20,20 @@ Extends the global agent preferences for work inside a Code Ocean capsule.
 ## Storage
 
 Root filesystem is ~5 GB and fills especially quickly on GPU machines. Put all temporary
-files, caches, build directories, environments, user installations, models, and compiled
-GPU artifacts under `/scratch/.dotfiles/`; finals go to `/results`.
+files, caches, build directories, user installations, models, and compiled
+GPU artifacts under `/scratch/.dotfiles/`.
 Write analysis outputs to `/scratch` by default: its storage mount is substantially faster
 than `/results`. Write analysis outputs to `/results` only when the user explicitly asks
 for them there; reserve `/results` for requested final artifacts.
 Never use root-backed `/tmp`, `~/.cache`, `~/.local`, `~/.conda`, or `.venv` defaults.
 Run `ulimit -c 0` at session start and monitor root usage during installation-heavy work.
 
+Conda environments should always be installed in `/scratch/envs`
+
 ## Environment
 
 Keep dependency recipes and locks in `environment/`. Put actual Conda/virtual environments
-and interactive installations under `/scratch/.dotfiles/envs/`; recreate them deterministically
+and interactive installations under `/scratch/envs/`; recreate them deterministically
 from their lock when locking has been explicitly requested; otherwise do not rely on persistent scratch state for anything that must survive.
 
 Redirect caches to `/scratch` at runtime — do **not** use Dockerfile `ENV` (`/scratch` is
