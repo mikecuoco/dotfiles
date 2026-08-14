@@ -22,6 +22,9 @@ Extends the global agent preferences for work inside a Code Ocean capsule.
 Root filesystem is ~5 GB and fills especially quickly on GPU machines. Put all temporary
 files, caches, build directories, environments, user installations, models, and compiled
 GPU artifacts under `/scratch/.dotfiles/`; finals go to `/results`.
+Write analysis outputs to `/scratch` by default: its storage mount is substantially faster
+than `/results`. Write analysis outputs to `/results` only when the user explicitly asks
+for them there; reserve `/results` for requested final artifacts.
 Never use root-backed `/tmp`, `~/.cache`, `~/.local`, `~/.conda`, or `.venv` defaults.
 Run `ulimit -c 0` at session start and monitor root usage during installation-heavy work.
 
