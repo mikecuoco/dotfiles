@@ -26,6 +26,8 @@
   prefer uv, or conda/mamba for native dependencies.
 - Do not mutate global/base environments. Do not create, refresh, require, or
   prompt for `conda-lock` unless asked.
+- When creating a Conda environment with a Jupyter kernel, register the kernel
+  with Jupyter before finishing.
 - Pin dependencies when reproducibility is an explicit goal, not during early
   exploration without a concrete need.
 - Use pathlib.Path, f-strings, dataclasses, match/case (Python 3.11+).
