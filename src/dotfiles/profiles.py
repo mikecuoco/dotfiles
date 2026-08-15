@@ -1,6 +1,7 @@
 """Profile loading and composition for dotfiles."""
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from ._toml import tomllib
 
 
 VALID_MODES = frozenset({"link", "append", "merge-json", "merge-toml"})
+MERGE_MODES = frozenset({"merge-json", "merge-toml"})
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,36 @@ class Profile:
     description: str
     inherits: list[str]
     links: list[LinkSpec]
+
+
+def compose_sources(paths: list[Path]) -> str:
+    """Return the concatenated text of *paths* — the "generated file" rule.
+
+    A generated destination is the blank-line-separated concatenation of its
+    base link followed by every append link, in declaration order.
+    """
+    return "\n\n".join(path.read_text() for path in paths)
+
+
+def group_links(
+    links: list[LinkSpec],
+) -> tuple[dict[str, LinkSpec], dict[str, list[LinkSpec]], dict[str, LinkSpec]]:
+    """Partition *links* by mode into ``(base, appends, merges)``.
+
+    ``base`` and ``merges`` are keyed by destination with the last entry
+    winning; ``appends`` keeps every entry for a destination in order.
+    """
+    base: dict[str, LinkSpec] = {}
+    appends: dict[str, list[LinkSpec]] = defaultdict(list)
+    merges: dict[str, LinkSpec] = {}
+    for lnk in links:
+        if lnk.mode == "append":
+            appends[lnk.dst].append(lnk)
+        elif lnk.mode in MERGE_MODES:
+            merges[lnk.dst] = lnk
+        else:
+            base[lnk.dst] = lnk
+    return base, appends, merges
 
 
 def _make_link_spec(profile_name: str, lnk: dict) -> LinkSpec:
@@ -95,21 +127,18 @@ def resolve_links(profile_name: str, profiles: dict[str, Profile]) -> list[LinkS
     # "link" mode: deduplicate by dst — last occurrence (child) wins.
     # "append" mode: stack after the base link in declaration order.
     # Merge modes mutate standalone config files and must be unique per dst.
-    base: dict[str, LinkSpec] = {}
-    appends: list[LinkSpec] = []
-    merges: dict[str, LinkSpec] = {}
-    for lnk in all_links:
-        if lnk.mode == "append":
-            appends.append(lnk)
-        elif lnk.mode in {"merge-json", "merge-toml"}:
-            if lnk.dst in merges:
-                raise ValueError(
-                    f"Profile '{profile_name}': duplicate merge destination "
-                    f"{lnk.dst!r}"
-                )
-            merges[lnk.dst] = lnk
-        else:
-            base[lnk.dst] = lnk  # last wins
+    base, _, merges = group_links(all_links)
+    # Keep the flat declaration order rather than grouping appends by dst.
+    appends = [lnk for lnk in all_links if lnk.mode == "append"]
+
+    merge_dsts = [lnk.dst for lnk in all_links if lnk.mode in MERGE_MODES]
+    if len(merge_dsts) != len(merges):
+        duplicate = next(
+            dst for dst in merge_dsts if merge_dsts.count(dst) > 1
+        )
+        raise ValueError(
+            f"Profile '{profile_name}': duplicate merge destination {duplicate!r}"
+        )
 
     orphans = [a for a in appends if a.dst not in base]
     if orphans:

@@ -3,18 +3,18 @@ from __future__ import annotations
 
 import json
 import shutil
-import sys
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
 from .auth import AuthStatus, all_statuses
-from .claude_plugins import PluginStatus, check_plugin_statuses
+from .claude_plugins import PluginStatus, check_plugin_statuses, load_plugin_config
 from .agent_skills import SkillStatus, check_skill_statuses
 from .install import get_resources_dir, read_state
 from .platform import PlatformInfo, detect_platform
 from .project_memory import MemoryStatus, check_project_memory, find_repo_root
-from .profiles import load_profiles, resolve_links
+from .profiles import compose_sources, group_links, load_profiles, resolve_links
 
 
 # Tools to check — split into required and optional
@@ -90,65 +90,19 @@ def run_doctor(as_json: bool = False) -> int:
     if state:
         generated = set(state.get("generated", []))
         merged = set(state.get("merged", []))
-        expected_generated: dict[str, str] = {}
-        try:
-            active_links = resolve_links(state["profile"], load_profiles(resources))
-            bases = {link.dst: link for link in active_links if link.mode == "link"}
-            appends: dict[str, list] = {}
-            for link in active_links:
-                if link.mode == "append":
-                    appends.setdefault(link.dst, []).append(link)
-            for dst_rel, extra_links in appends.items():
-                if dst_rel not in bases:
-                    continue
-                sources = [bases[dst_rel], *extra_links]
-                expected_generated[dst_rel] = "\n\n".join(
-                    (resources / link.src).read_text() for link in sources
-                )
-        except (KeyError, OSError, ValueError):
-            expected_generated = {}
+        expected_generated = _expected_generated(resources, state["profile"])
 
-        for dst_rel, src_rel in state["links"].items():
-            dst = home / dst_rel
-            src = resources / src_rel
-            if dst_rel in generated:
-                regular = dst.is_file() and not dst.is_symlink()
-                expected = expected_generated.get(dst_rel)
-                matches = regular and expected is not None and dst.read_text() == expected
-                report.file_statuses.append(
-                    FileStatus(
-                        dst_rel,
-                        matches,
-                        "generated" if matches else (
-                            "generated content differs" if regular else "missing"
-                        ),
-                    )
-                )
-            elif dst_rel in merged:
-                regular = dst.is_file() and not dst.is_symlink()
-                report.file_statuses.append(
-                    FileStatus(dst_rel, regular, "merged" if regular else "missing")
-                )
-            elif dst.is_symlink():
-                try:
-                    if dst.resolve() == src.resolve():
-                        report.file_statuses.append(
-                            FileStatus(dst_rel, True, "ok")
-                        )
-                        continue
-                except OSError:
-                    pass
-                report.file_statuses.append(
-                    FileStatus(dst_rel, False, "symlink points elsewhere")
-                )
-            elif dst.exists():
-                report.file_statuses.append(
-                    FileStatus(dst_rel, False, "exists but not a dotfiles symlink")
-                )
-            else:
-                report.file_statuses.append(
-                    FileStatus(dst_rel, False, "missing")
-                )
+        report.file_statuses = [
+            _file_status(
+                dst_rel,
+                home / dst_rel,
+                resources / src_rel,
+                generated,
+                merged,
+                expected_generated,
+            )
+            for dst_rel, src_rel in state["links"].items()
+        ]
 
     # ── Tool checks ──────────────────────────────────────────────────────────
     for name in _REQUIRED_TOOLS:
@@ -165,14 +119,12 @@ def run_doctor(as_json: bool = False) -> int:
     # Non-fatal: if claude CLI is absent, both lists remain empty and the
     # section is omitted from the output.
     all_plugin_statuses = check_plugin_statuses(resources)
-    report.claude_plugin_statuses = [
-        s for s in all_plugin_statuses
-        if _is_default_plugin(s, resources)
-    ]
-    report.bio_plugin_statuses = [
-        s for s in all_plugin_statuses
-        if not _is_default_plugin(s, resources)
-    ]
+    default_names = _default_plugin_names(resources)
+    for status in all_plugin_statuses:
+        if status.name in default_names:
+            report.claude_plugin_statuses.append(status)
+        else:
+            report.bio_plugin_statuses.append(status)
 
     # ── Agent skill checks ────────────────────────────────────────────────────
     # Non-fatal: warn if none are installed; not an error for exit-code purposes.
@@ -216,20 +168,76 @@ def run_doctor(as_json: bool = False) -> int:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-def _is_default_plugin(status: PluginStatus, resources: Path) -> bool:
-    """Return True if *status* belongs to the default plugin group."""
-    from .claude_plugins import load_plugin_config
+def _expected_generated(resources: Path, profile: str) -> dict[str, str]:
+    """Return the content each generated destination should currently hold.
+
+    Returns an empty mapping if the profile cannot be resolved or a source is
+    unreadable, in which case every generated file reports as differing.
+    """
+    try:
+        base, appends, _ = group_links(
+            resolve_links(profile, load_profiles(resources))
+        )
+        return {
+            dst_rel: compose_sources(
+                [resources / link.src for link in (base[dst_rel], *extra_links)]
+            )
+            for dst_rel, extra_links in appends.items()
+            if dst_rel in base
+        }
+    except (KeyError, OSError, ValueError):
+        return {}
+
+
+def _file_status(
+    dst_rel: str,
+    dst: Path,
+    src: Path,
+    generated: set[str],
+    merged: set[str],
+    expected_generated: dict[str, str],
+) -> FileStatus:
+    """Classify one installed destination against what the state file expects."""
+    if dst_rel in generated:
+        regular = dst.is_file() and not dst.is_symlink()
+        expected = expected_generated.get(dst_rel)
+        matches = regular and expected is not None and dst.read_text() == expected
+        if matches:
+            return FileStatus(dst_rel, True, "generated")
+        return FileStatus(
+            dst_rel, False, "generated content differs" if regular else "missing"
+        )
+
+    if dst_rel in merged:
+        regular = dst.is_file() and not dst.is_symlink()
+        return FileStatus(dst_rel, regular, "merged" if regular else "missing")
+
+    if dst.is_symlink():
+        try:
+            if dst.resolve() == src.resolve():
+                return FileStatus(dst_rel, True, "ok")
+        except OSError:
+            pass
+        return FileStatus(dst_rel, False, "symlink points elsewhere")
+
+    if dst.exists():
+        return FileStatus(dst_rel, False, "exists but not a dotfiles symlink")
+
+    return FileStatus(dst_rel, False, "missing")
+
+
+def _default_plugin_names(resources: Path) -> set[str]:
+    """Return the integration names in the ``default`` plugin group.
+
+    Loaded once per doctor run; an unreadable config classifies everything as
+    non-default, matching the previous per-status fallback.
+    """
     try:
         cfg = load_plugin_config(resources)
-        default_names = {s.name for s in cfg.groups.get("default", _empty_group()).integrations}
-        return status.name in default_names
     except (FileNotFoundError, KeyError):
-        return False
-
-
-def _empty_group():
-    from .claude_plugins import GroupConfig
-    return GroupConfig(name="", description="", integrations=[])
+        return set()
+    group = cfg.groups.get("default")
+    return {spec.name for spec in group.integrations} if group else set()
 
 
 # ── Formatters ────────────────────────────────────────────────────────────────
@@ -286,7 +294,6 @@ def _emit_human(report: DoctorReport) -> None:
         for ps in report.bio_plugin_statuses:
             _print_plugin_status(ps, ok, warn, fail)
 
-    from collections import Counter
     for label, statuses in (
         ("Claude Code skills", report.skill_statuses),
         ("Codex skills", report.codex_skill_statuses),
@@ -346,64 +353,18 @@ def _emit_json(report: DoctorReport) -> None:
                 for f in report.file_statuses
             ],
         },
-        "tools": [
-            {
-                "name": t.name,
-                "found": t.found,
-                "path": t.path,
-                "required": t.required,
-            }
-            for t in report.tool_statuses
-        ],
-        "auth": [
-            {
-                "name": a.name,
-                "configured": a.configured,
-                "message": a.message,
-                "required": a.required,
-            }
-            for a in report.auth_statuses
-        ],
-        "claude_plugins": [
-            {
-                "name": p.name,
-                "type": p.type,
-                "installed": p.installed,
-                "message": p.message,
-                "auth_hint": p.auth_hint,
-            }
-            for p in report.claude_plugin_statuses
-        ],
-        "bio_plugins": [
-            {
-                "name": p.name,
-                "type": p.type,
-                "installed": p.installed,
-                "message": p.message,
-                "auth_hint": p.auth_hint,
-            }
-            for p in report.bio_plugin_statuses
-        ],
-        "bioskills": [
-            {
-                "name": s.name,
-                "category": s.category,
-                "installed": s.installed,
-                "message": s.message,
-            }
-            for s in report.skill_statuses
-        ],
-        "codex_skills": [
-            {
-                "name": s.name,
-                "category": s.category,
-                "installed": s.installed,
-                "message": s.message,
-            }
-            for s in report.codex_skill_statuses
-        ],
+        # These four status types already name their fields exactly as the
+        # JSON contract does, so asdict() is the schema.
+        "tools": [asdict(t) for t in report.tool_statuses],
+        "auth": [asdict(a) for a in report.auth_statuses],
+        "claude_plugins": [asdict(p) for p in report.claude_plugin_statuses],
+        "bio_plugins": [asdict(p) for p in report.bio_plugin_statuses],
+        "bioskills": [asdict(s) for s in report.skill_statuses],
+        "codex_skills": [asdict(s) for s in report.codex_skill_statuses],
         "project_memory": {
             "root": report.project_memory_root,
+            # `ok` is a computed property rather than a field, so this one is
+            # spelled out — key order is part of the emitted contract.
             "checks": [
                 {
                     "path": status.path,

@@ -3,17 +3,25 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
-from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
 from ._toml import tomllib
-from .profiles import LinkSpec, load_profiles, resolve_links
+from .agent_skills import run_bundled_skills_setup
+from .profiles import (
+    LinkSpec,
+    compose_sources,
+    group_links,
+    load_profiles,
+    resolve_links,
+)
 from .platform import detect_platform
 
 
@@ -32,22 +40,13 @@ class Result(Enum):
     ERROR = auto()
 
 
+@dataclass
 class _Report:
-    __slots__ = ("result", "dst", "src", "backup", "error")
-
-    def __init__(
-        self,
-        result: Result,
-        dst: Path,
-        src: Path,
-        backup: Optional[Path] = None,
-        error: Optional[str] = None,
-    ) -> None:
-        self.result = result
-        self.dst = dst
-        self.src = src
-        self.backup = backup
-        self.error = error
+    result: Result
+    dst: Path
+    src: Path
+    backup: Optional[Path] = None
+    error: Optional[str] = None
 
 
 def get_resources_dir() -> Path:
@@ -107,16 +106,8 @@ def run_install(
 
     # Group links by mode. Appends compose with a base link; merge modes target
     # standalone mutable config files such as ~/.claude.json and Codex config.
-    base_links: dict[str, LinkSpec] = {}
-    append_links: dict[str, list[LinkSpec]] = defaultdict(list)
-    merge_links: list[LinkSpec] = []
-    for lnk in links:
-        if lnk.mode == "append":
-            append_links[lnk.dst].append(lnk)
-        elif lnk.mode in {"merge-json", "merge-toml"}:
-            merge_links.append(lnk)
-        else:
-            base_links[lnk.dst] = lnk
+    base_links, append_links, merges_by_dst = group_links(links)
+    merge_links = list(merges_by_dst.values())
 
     # Install each link (concat when a dst has append entries)
     reports: list[_Report] = []
@@ -147,8 +138,6 @@ def run_install(
     # First-party skills are local, portable resources and are part of the core
     # install. Downloaded GPTomics skill groups remain opt-in through
     # ``dotfiles skills install``.
-    from .agent_skills import run_bundled_skills_setup
-
     skill_statuses = []
     if not quiet:
         print("\nAgent skills")
@@ -243,6 +232,40 @@ def read_state(home: Optional[Path] = None) -> Optional[dict]:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+def _backup_path(dst: Path) -> Path:
+    """Return the timestamped sibling path used to preserve an existing file."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return dst.with_name(dst.name + f".dotfiles-backup.{ts}")
+
+
+def _atomic_write(dst: Path, text: str, file_mode: int) -> None:
+    """Replace *dst* with *text* via a same-directory temp file.
+
+    Raises ``OSError`` on failure, after removing the temp file it created.
+    """
+    temporary: Optional[Path] = None
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=dst.parent,
+            prefix=f".{dst.name}.",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(text)
+        os.chmod(temporary, file_mode)
+        os.replace(temporary, dst)
+    except OSError:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+        raise
+
+
 def _install_link(src: Path, dst: Path, dry_run: bool) -> _Report:
     """Create symlink dst → src with backup-on-conflict semantics."""
     if not src.exists():
@@ -262,8 +285,7 @@ def _install_link(src: Path, dst: Path, dry_run: bool) -> _Report:
     backup: Optional[Path] = None
 
     if dst.exists() or dst.is_symlink():
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        backup = dst.with_name(dst.name + f".dotfiles-backup.{ts}")
+        backup = _backup_path(dst)
         if not dry_run:
             dst.rename(backup)
 
@@ -298,7 +320,7 @@ def _install_concat(
         if not src.exists():
             return _Report(Result.ERROR, dst, srcs[0], error=f"Source not found: {src}")
 
-    combined = "\n\n".join(s.read_text() for s in srcs)
+    combined = compose_sources(srcs)
 
     # Idempotent: skip if dst already contains the same generated content
     if dst.exists() and not dst.is_symlink() and dst.read_text() == combined:
@@ -312,8 +334,7 @@ def _install_concat(
                 dst.unlink()
         else:
             # Unmanaged user file — back it up
-            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            backup = dst.with_name(dst.name + f".dotfiles-backup.{ts}")
+            backup = _backup_path(dst)
             if not dry_run:
                 dst.rename(backup)
 
@@ -376,26 +397,9 @@ def _install_json_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
     if dry_run:
         return _Report(Result.DRY, dst, src)
 
-    temporary: Optional[Path] = None
     try:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=dst.parent,
-            prefix=f".{dst.name}.",
-            delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            stream.write(json.dumps(merged, indent=2) + "\n")
-        os.chmod(temporary, file_mode)
-        os.replace(temporary, dst)
+        _atomic_write(dst, json.dumps(merged, indent=2) + "\n", file_mode)
     except OSError as exc:
-        if temporary is not None:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
         return _Report(Result.ERROR, dst, src, error=f"JSON merge failed: {exc}")
 
     return _Report(Result.MERGED, dst, src)
@@ -491,26 +495,9 @@ def _install_toml_merge(src: Path, dst: Path, dry_run: bool) -> _Report:
     if dry_run:
         return _Report(Result.DRY, dst, src)
 
-    temporary: Optional[Path] = None
     try:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=dst.parent,
-            prefix=f".{dst.name}.",
-            delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            stream.write(merged_text)
-        os.chmod(temporary, file_mode)
-        os.replace(temporary, dst)
+        _atomic_write(dst, merged_text, file_mode)
     except OSError as exc:
-        if temporary is not None:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
         return _Report(Result.ERROR, dst, src, error=f"TOML merge failed: {exc}")
 
     return _Report(Result.MERGED, dst, src)
@@ -572,8 +559,6 @@ def _write_profile_file(home: Path, profile_name: str) -> None:
 
 def _configure_git_credential_helper(profile_name: str) -> None:
     """Configure git credential helper appropriate for the platform."""
-    import shutil
-
     if not shutil.which("git"):
         return
 

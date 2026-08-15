@@ -87,7 +87,7 @@ def check_github() -> AuthStatus:
                 return AuthStatus("GitHub", True, f"gh: {first}")
             return AuthStatus(
                 "GitHub", False,
-                f"gh auth status failed — run: gh auth login",
+                "gh auth status failed — run: gh auth login",
             )
         except (subprocess.TimeoutExpired, OSError):
             pass
@@ -246,26 +246,25 @@ def _find_sso_session() -> str | None:
     return None
 
 
-def check_openai() -> AuthStatus:
-    """Check OPENAI_API_KEY is set (used by Codex and ChatGPT API)."""
-    if os.environ.get("OPENAI_API_KEY"):
-        return AuthStatus("OpenAI / Codex", True, "OPENAI_API_KEY is set", required=False)
+def _optional_env_var(label: str, variable: str, skip_hint: str) -> AuthStatus:
+    """Report presence of a single optional credential environment variable."""
+    if os.environ.get(variable):
+        return AuthStatus(label, True, f"{variable} is set", required=False)
     return AuthStatus(
-        "OpenAI / Codex", False,
-        "OPENAI_API_KEY not set (optional — skip if not using Codex/ChatGPT API)",
+        label, False,
+        f"{variable} not set (optional — skip if not using {skip_hint})",
         required=False,
     )
+
+
+def check_openai() -> AuthStatus:
+    """Check OPENAI_API_KEY is set (used by Codex and ChatGPT API)."""
+    return _optional_env_var("OpenAI / Codex", "OPENAI_API_KEY", "Codex/ChatGPT API")
 
 
 def check_mem0() -> AuthStatus:
     """Check MEM0_API_KEY is set (optional service)."""
-    if os.environ.get("MEM0_API_KEY"):
-        return AuthStatus("Mem0", True, "MEM0_API_KEY is set", required=False)
-    return AuthStatus(
-        "Mem0", False,
-        "MEM0_API_KEY not set (optional — skip if not using Mem0)",
-        required=False,
-    )
+    return _optional_env_var("Mem0", "MEM0_API_KEY", "Mem0")
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
