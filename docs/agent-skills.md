@@ -50,4 +50,7 @@ dotfiles skills install --with all --allow-large
   directory containing `SKILL.md` as `<skill-dir>` when invoking bundled files.
 - Keep detailed knowledge in direct `references/` links and deterministic work
   in `scripts/`.
+- Do not commit build or editor artifacts into a skill directory. `__pycache__`,
+  `.pyc`, `.ipynb_checkpoints`, and `.DS_Store` are excluded at install time and
+  never reach an installed skill.
 - Validate every bundled skill before release.

@@ -296,6 +296,15 @@ def main() -> None:
                 update=args.skills_command == "update",
             )
             failed = [s for s in statuses if not s.installed and not args.dry_run]
+            if not args.dry_run:
+                # Every installed skill's description occupies agent context, so
+                # report the total rather than leaving a large group implicit.
+                installed = {
+                    s.name
+                    for s in statuses
+                    if s.installed and not s.message.startswith("removed")
+                }
+                print(f"\n  {len(installed)} skills installed across both agents")
             sys.exit(1 if failed else 0)
         elif args.skills_command == "status":
             from collections import Counter

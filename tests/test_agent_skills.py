@@ -5,6 +5,7 @@ without network access or a live bioSkills installation.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -151,6 +152,51 @@ def test_code_ocean_skill_is_packaged():
     assert (skill / "scripts" / "refresh_datasets.py").is_file()
     assert (skill / "scripts" / "check_capsule.py").is_file()
     assert (skill / "agents" / "openai.yaml").is_file()
+
+
+def test_first_party_skill_frontmatter_matches_directory_name():
+    """Every bundled skill must declare the name its directory uses."""
+    root = RESOURCES / "common" / "agents" / "skills"
+    skills = sorted(p for p in root.iterdir() if (p / "SKILL.md").is_file())
+
+    assert {p.name for p in skills} >= {
+        "code-ocean-capsule",
+        "conda-environments",
+        "jupyter-workflow",
+        "project-memory",
+        "scientific-plotting",
+    }
+    for skill in skills:
+        text = (skill / "SKILL.md").read_text(encoding="utf-8")
+        assert f"name: {skill.name}\n" in text, skill.name
+        assert "description:" in text, skill.name
+        assert (skill / "agents" / "openai.yaml").is_file(), skill.name
+
+
+def test_bundled_skill_install_excludes_build_artifacts(tmp_path):
+    """Stale bytecode in a source skill must never reach an installed skill."""
+    resources = _fake_bundled_skill(
+        tmp_path,
+        files={
+            "SKILL.md": "---\nname: example-skill\ndescription: Test\n---\n",
+            "scripts/helper.py": "print('hi')\n",
+            "scripts/__pycache__/helper.cpython-38.pyc": "stale bytecode",
+            "scripts/helper.pyc": "stale bytecode",
+            ".DS_Store": "junk",
+        },
+    )
+    target = tmp_path / "target"
+
+    run_bundled_skills_setup(resources, target)
+
+    installed = target / "example-skill"
+    assert (installed / "scripts" / "helper.py").is_file()
+    assert not (installed / "scripts" / "__pycache__").exists()
+    assert not (installed / "scripts" / "helper.pyc").exists()
+    assert not (installed / ".DS_Store").exists()
+
+    registry = json.loads((target / ".dotfiles-managed-skills.json").read_text())
+    assert registry["skills"]["example-skill"] == ["SKILL.md", "scripts/helper.py"]
 
 
 def test_bundled_skill_directory_is_copied(tmp_path):

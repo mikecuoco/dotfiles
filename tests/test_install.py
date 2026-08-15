@@ -150,10 +150,36 @@ def test_first_party_skills_install_for_both_agents(fake_home):
     for root in (fake_home / ".claude" / "skills", fake_home / ".agents" / "skills"):
         for name in (
             "code-ocean-capsule",
+            "conda-environments",
             "jupyter-workflow",
+            "project-memory",
             "scientific-plotting",
         ):
             assert (root / name / "SKILL.md").is_file()
+
+
+def test_cluster_profile_appends_its_agent_overlay(fake_home):
+    """The cluster overlay must reach both generated instruction files."""
+    run_install(profile="cluster", dry_run=False, home=fake_home)
+
+    for generated in (fake_home / ".claude" / "CLAUDE.md", fake_home / ".codex" / "AGENTS.md"):
+        text = generated.read_text()
+        assert "HPC Cluster Conventions" in text
+        # The shared preferences must still lead the generated file.
+        assert text.index("# Safety") < text.index("HPC Cluster Conventions")
+
+
+def test_shared_preferences_keep_the_memory_reading_trigger(fake_home):
+    """Memory only works because the generated instructions tell agents to scan it.
+
+    Authoring rules moved to the project-memory skill; the reading trigger
+    cannot move without silently disabling project memory.
+    """
+    run_install(profile="codespace", dry_run=False, home=fake_home)
+
+    text = (fake_home / ".claude" / "CLAUDE.md").read_text()
+    assert ".agents/memory/" in text
+    assert "scan" in text
 
 
 def test_dry_run_does_not_write_state(fake_home):

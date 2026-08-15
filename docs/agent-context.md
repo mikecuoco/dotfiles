@@ -19,6 +19,7 @@ tool-specific:
 
 environment-specific:
     codeocean/agents/PREFERENCES.md    appended for the Code Ocean profile
+    cluster/agents/PREFERENCES.md      appended for the HPC cluster profile
 
 installed:
     ~/.claude/CLAUDE.md                shared + Claude + environment
@@ -43,13 +44,29 @@ Claude and Codex aligned without putting Claude model names in Codex guidance.
 
 | Layer | Contains |
 |---|---|
-| Shared preferences | Universal working style, engineering, notebooks, memory, and safety rules |
+| Shared preferences | Safety, working style, and engineering rules, plus any prohibition that must already be loaded before the agent acts |
 | Tool supplement | Delegation and model/effort guidance specific to Claude or Codex |
 | Profile overlay | Environment invariants such as filesystem layout and resource limits |
 | Project instructions | Stable conventions every session in that repository needs |
-| Agent skills | Scoped or procedural knowledge fetched when applicable |
+| Agent skills | Procedures, recipes, and checklists whose trigger can be named in a `description` and fetched when applicable |
 | Project memory | Local `.agents/memory/*.md` files shared by both agents |
 | Temporary context | Plans, debug notes, and task state that can be discarded |
+
+### Preference or skill
+
+Preferences cost context on every turn of every session. Skills cost nothing
+until they trigger, but a skill that never triggers is worse than the
+preference line it replaced. Two checks decide it:
+
+1. Can you write a `description` that reliably matches the moment the rule
+   matters? If not, it cannot be a skill.
+2. If the agent never loads it, what breaks? Irreversible damage means it stays
+   a preference regardless of length.
+
+In practice, prohibitions belong in preferences and procedures belong in
+skills. A rule split across both — such as project memory, where reading is a
+preference and authoring is a skill — should be split at that boundary rather
+than duplicated.
 
 ## Configuration parity
 

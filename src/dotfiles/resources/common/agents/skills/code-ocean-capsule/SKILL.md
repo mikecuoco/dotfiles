@@ -5,7 +5,9 @@ description: Organize, scaffold, edit, and review Code Ocean compute capsules us
 
 # Code Ocean Capsule
 
-Use an interactive-first workflow. During exploration, prioritize correct, robust, logically organized code and fast iteration. Reproducibility tooling is opt-in: do not force exploratory work into a finished pipeline or introduce it merely because the capsule appears mature.
+Use an interactive-first workflow. During exploration, prioritize correct, robust, logically organized code and fast iteration.
+
+Reproducibility tooling — the `run` entrypoint and `conda-lock` — is opt-in. Create, modify, invoke, or require it only when the user explicitly requests it, never because the capsule appears mature. Their absence is not a defect. This rule governs the whole skill and is not repeated below.
 
 ## Establish intent
 
@@ -21,7 +23,7 @@ Do not attach or detach Data Assets, create Code Ocean resources, run expensive 
 
 ## Inspect before changing
 
-Locate the capsule root and inspect the relevant parts of `code/`, `environment/`, `.codeocean/datasets.json`, `data/`, `scratch/`, and `results/`, using their absolute Code Ocean paths when running inside a capsule. Inspect Git status and preserve unrelated changes. Infer whether the capsule is exploratory or stabilizing, but treat it as being finalized only when the user explicitly requests finalization. Missing locks and `run` are not defects otherwise.
+Locate the capsule root and inspect the relevant parts of `code/`, `environment/`, `.codeocean/datasets.json`, `data/`, `scratch/`, and `results/`, using their absolute Code Ocean paths when running inside a capsule. Inspect Git status and preserve unrelated changes. Infer whether the capsule is exploratory or stabilizing, but treat it as being finalized only when the user explicitly requests finalization.
 
 ## Apply the core rules
 
@@ -30,8 +32,8 @@ Locate the capsule root and inspect the relevant parts of `code/`, `environment/
 3. Put all temporary files, caches, build products, downloaded models, package caches, environments, and interactive installations in subdirectories of `/scratch`. The root filesystem is only about 5 GB and fills especially quickly on GPU machines.
 4. Treat `/data` as immutable input, `/scratch` as disposable or workstation-local working storage, `/results` as final reproducible output, `/code` as analysis source, and `/environment` as recipes and locks—not installed environments.
 5. Maintain `/code/datasets.yaml` as the editable dataset manifest and `/code/DATASETS.md` as its generated human-readable view. Preserve manual provenance during refreshes.
-6. Keep human-edited Conda constraints in `/environment/environment.yml` and place the actual environment and solver caches under `/scratch`. Do not generate, refresh, require, or prompt for `/environment/conda-lock.yml` unless the user explicitly requests it.
-7. Do not create, modify, invoke, or require `run` until the user explicitly requests the reproducible entrypoint. Then keep it small, executable, headless, and focused on orchestration.
+6. Keep human-edited Conda constraints in `/environment/environment.yml` and place the actual environment and solver caches under `/scratch`. A requested `/environment/conda-lock.yml` is generated, never hand-edited. See the `conda-environments` skill for channel and solver policy.
+7. When the reproducible entrypoint is requested, keep `run` small, executable, headless, and focused on orchestration rather than scientific implementation.
 8. Consider memory footprint, CPU concurrency, runtime, scratch usage, and avoidable recomputation at every stage. Use bounded or chunked approaches where practical and surface material resource requirements.
 
 Number analysis arms with stable, zero-padded two-digit prefixes. Order them by dependency or scientific reading order, preserve useful gaps, and avoid casual renumbering because notebooks and saved artifacts may refer to their paths. Root manifests, `run`, and a shared package remain unnumbered.

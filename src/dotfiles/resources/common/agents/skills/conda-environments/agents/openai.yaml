@@ -1,0 +1,4 @@
+interface:
+  display_name: "Conda Environments"
+  short_description: "Build portable, solvable Conda environments"
+  default_prompt: "Use $conda-environments to create or fix this environment with a strict channel policy."

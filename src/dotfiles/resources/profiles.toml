@@ -62,6 +62,8 @@ links = [
   { src = "cluster/shell/.exports.cluster",   dst = ".exports.cluster" },
   { src = "cluster/shell/.functions.cluster", dst = ".functions.cluster" },
   { src = "cluster/r/.Rprofile",              dst = ".Rprofile" },
+  { src = "cluster/agents/PREFERENCES.md",    dst = ".claude/CLAUDE.md", mode = "append" },
+  { src = "cluster/agents/PREFERENCES.md",    dst = ".codex/AGENTS.md", mode = "append" },
 ]
 
 [profiles.codeocean]

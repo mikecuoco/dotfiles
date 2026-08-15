@@ -24,6 +24,11 @@ from ._toml import tomllib
 
 _MANAGED_SKILLS_FILE = ".dotfiles-managed-skills.json"
 _SKILL_NAME_RE = re.compile(r"[a-z0-9-]{1,64}")
+# Build and editor artifacts that may sit in a source skill directory but must
+# never be copied into an installed skill or recorded in the managed registry.
+_SKILL_ARTIFACT_DIRS = frozenset({"__pycache__", ".ipynb_checkpoints", ".pytest_cache"})
+_SKILL_ARTIFACT_SUFFIXES = frozenset({".pyc", ".pyo"})
+_SKILL_ARTIFACT_NAMES = frozenset({".DS_Store"})
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---(?:\s*\n|\Z)", re.DOTALL)
 _NAME_LINE_RE = re.compile(r"(?m)^name:\s*[^\n]+$")
 
@@ -299,13 +304,28 @@ def _write_managed_skills(target_dir: Path, skills: dict[str, list[str]]) -> Non
     path.write_text(content, encoding="utf-8")
 
 
+def _is_skill_artifact(relative: PurePosixPath) -> bool:
+    """Return whether a skill-relative path is a build or editor artifact."""
+    if any(part in _SKILL_ARTIFACT_DIRS for part in relative.parts):
+        return True
+    return relative.suffix in _SKILL_ARTIFACT_SUFFIXES or relative.name in _SKILL_ARTIFACT_NAMES
+
+
 def _skill_files(skill_dir: Path) -> dict[str, Path]:
-    """Return relative path → source path for all regular files in a skill."""
-    return {
-        path.relative_to(skill_dir).as_posix(): path
-        for path in sorted(skill_dir.rglob("*"))
-        if path.is_file() and not path.is_symlink()
-    }
+    """Return relative path → source path for the installable files in a skill.
+
+    Build and editor artifacts are excluded so stale bytecode in a source
+    directory is never copied into an installed skill.
+    """
+    files: dict[str, Path] = {}
+    for path in sorted(skill_dir.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = PurePosixPath(path.relative_to(skill_dir).as_posix())
+        if _is_skill_artifact(relative):
+            continue
+        files[str(relative)] = path
+    return files
 
 
 def _safe_relative_path(value: str) -> bool:

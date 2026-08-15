@@ -28,6 +28,10 @@ Required rules belong in checked-in `AGENTS.md`, `CLAUDE.md`, or project
 documentation. Memories are advisory and material claims should be checked
 against the current repository before use.
 
+Reading memories is covered by the generated global instructions. Writing them
+is covered by the `project-memory` skill, which holds the routing decision
+(memory, project instructions, or nothing) and the authoring rules.
+
 ## Commands
 
 ```bash
