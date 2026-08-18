@@ -122,8 +122,9 @@ log() {
 
 # ── Conda / Mamba ─────────────────────────────────────────────────────────────
 
-# Lazy conda initialization — avoids the slow conda startup on every shell open.
-# Usage: type `cond` once per session, then use conda/mamba normally.
+# Conda re-initialization fallback — call this if conda was not initialized
+# automatically at shell startup (e.g., non-standard install path).
+# Usage: type `cond` to initialize conda/mamba for this session.
 cond() {
     local _exe _root
 

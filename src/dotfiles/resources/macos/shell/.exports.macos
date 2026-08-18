@@ -62,5 +62,23 @@ if ! command -v zoxide &>/dev/null && command -v brew &>/dev/null; then
     unset _z_path
 fi
 
+# ── Conda initialization ──────────────────────────────────────────────────────
+# Search common macOS conda installation paths (miniforge, mambaforge, miniconda)
+if [ -z "$CONDA_DEFAULT_ENV" ]; then
+    for _conda_root in \
+        "$HOME/miniforge3" \
+        "$HOME/mambaforge" \
+        "$HOME/miniconda3" \
+        "$HOME/anaconda3" \
+        "/opt/homebrew/Caskroom/miniforge/base" \
+        "/opt/homebrew/Caskroom/mambaforge/base"; do
+        if [ -f "$_conda_root/etc/profile.d/conda.sh" ]; then
+            source "$_conda_root/etc/profile.d/conda.sh"
+            break
+        fi
+    done
+    unset _conda_root
+fi
+
 # ── Machine-specific exports ──────────────────────────────────────────────────
 # Add machine-specific paths (e.g. CROMWELL_JAR, tool-specific vars) to ~/.extra

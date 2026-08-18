@@ -103,5 +103,11 @@ if [ -d /scratch ]; then
     unset _dotfiles_bin _dotfiles_scratch
 fi
 
+# ── Conda initialization ──────────────────────────────────────────────────────
+# On Code Ocean, conda is always installed at /opt/conda
+if [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
+    source "/opt/conda/etc/profile.d/conda.sh"
+fi
+
 # Install personal tools into a /scratch environment or user prefix. Record
 # scientific dependencies in environment recipes/locks for reproducibility.
