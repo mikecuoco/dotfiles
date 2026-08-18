@@ -45,6 +45,13 @@ def main() -> None:
         metavar="DIR",
         help="Override home directory (useful for testing)",
     )
+    p_install.add_argument(
+        "--claude-home",
+        metavar="DIR",
+        help="Override base directory for .claude/ files and skills "
+             "(default: /root/capsule on Code Ocean when that path exists, "
+             "otherwise HOME)",
+    )
 
     # ── update ───────────────────────────────────────────────────────────────
     p_update = sub.add_parser(
@@ -245,10 +252,12 @@ def main() -> None:
         from pathlib import Path
         from .install import run_install
         home = Path(args.home) if args.home else None
+        claude_home = Path(args.claude_home) if args.claude_home else None
         ok = run_install(
             profile=args.profile,
             dry_run=args.dry_run,
             home=home,
+            claude_home=claude_home,
             quiet=args.quiet,
         )
         sys.exit(0 if ok else 1)

@@ -360,3 +360,63 @@ def test_codex_toml_merge_refuses_symlink_destination(fake_home):
 
     assert ok is False
     assert tomllib.loads(target.read_text()) == {"model": "preserve-me"}
+
+
+# ── claude_home redirection (Code Ocean capsule) ──────────────────────────────
+
+def test_codeocean_claude_home_redirects_claude_files(fake_home, tmp_path):
+    """When claude_home is set, .claude/* files land there, not in home."""
+    capsule = tmp_path / "capsule"
+    capsule.mkdir()
+
+    ok = run_install(
+        profile="codeocean",
+        dry_run=False,
+        home=fake_home,
+        claude_home=capsule,
+    )
+
+    assert ok is True
+    # .claude config and generated CLAUDE.md go into the capsule
+    assert (capsule / ".claude" / "CLAUDE.md").exists()
+    assert (capsule / ".claude" / "settings.json").is_symlink()
+    # Skills also land in the capsule
+    assert (capsule / ".claude" / "skills" / "code-ocean-capsule" / "SKILL.md").is_file()
+
+    # Non-.claude files (shell, git, etc.) still go into home
+    assert (fake_home / ".bashrc").is_symlink()
+    # .claude dir must NOT exist in home when capsule is different
+    assert not (fake_home / ".claude").exists()
+
+
+def test_codeocean_claude_home_dry_run_writes_nothing(fake_home, tmp_path):
+    """dry_run=True must not write any files even with an explicit claude_home."""
+    capsule = tmp_path / "capsule"
+    capsule.mkdir()
+
+    ok = run_install(
+        profile="codeocean",
+        dry_run=True,
+        home=fake_home,
+        claude_home=capsule,
+    )
+
+    assert ok is True
+    assert list(capsule.rglob("*")) == []
+    assert list(fake_home.rglob(".*")) == []
+
+
+def test_codeocean_claude_home_shown_in_verbose_output(fake_home, tmp_path, capsys):
+    """Installer should report the non-default claude_home so it is visible."""
+    capsule = tmp_path / "capsule"
+    capsule.mkdir()
+
+    run_install(
+        profile="codeocean",
+        dry_run=True,
+        home=fake_home,
+        claude_home=capsule,
+    )
+
+    out = capsys.readouterr().out
+    assert str(capsule) in out

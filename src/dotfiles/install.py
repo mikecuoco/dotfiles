@@ -60,18 +60,38 @@ def get_resources_dir() -> Path:
     return Path(__file__).parent / "resources"
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _resolve_dst(dst_rel: str, home: Path, claude_home: Path) -> Path:
+    """Return the absolute destination path for *dst_rel*.
+
+    Paths that begin with ``.claude`` are rooted at *claude_home*; everything
+    else is rooted at *home*.  When *claude_home* equals *home* (the common
+    case) this is equivalent to ``home / dst_rel`` for all paths.
+    """
+    if Path(dst_rel).parts[0] == ".claude":
+        return claude_home / dst_rel
+    return home / dst_rel
+
+
 # ── Public entry points ───────────────────────────────────────────────────────
 
 def run_install(
     profile: Optional[str] = None,
     dry_run: bool = False,
     home: Optional[Path] = None,
+    claude_home: Optional[Path] = None,
     quiet: bool = False,
 ) -> bool:
     """Install dotfiles for *profile*.
 
     Routine progress is verbose by default. If *quiet* is true, only errors are
     printed.
+
+    *claude_home* overrides the base directory for ``.claude/`` destinations
+    (config, skills).  On Code Ocean, this defaults to ``/root/capsule`` when
+    that directory exists so that agent config lives inside the versioned
+    capsule rather than in the ephemeral home directory.
 
     Returns ``True`` on success, ``False`` if any link failed.
     """
@@ -86,11 +106,24 @@ def run_install(
         return False
 
     profile_name = info.platform
+
+    # Resolve the base directory for .claude/* files.  On Code Ocean the
+    # capsule lives at /root/capsule and is the only persistent location, so
+    # we default claude_home there when it exists.
+    if claude_home is None:
+        if profile_name == "codeocean":
+            _capsule = Path("/root/capsule")
+            claude_home = _capsule if _capsule.is_dir() else home
+        else:
+            claude_home = home
+
     prefix = "[dry-run] " if dry_run else ""
     if not quiet:
         print(f"{prefix}Installing profile: {profile_name}")
         print(f"  Signals : {', '.join(info.signals)}")
         print(f"  Resources: {resources}")
+        if claude_home != home:
+            print(f"  Claude home: {claude_home}")
         print()
 
     # Resolve links for this profile
@@ -123,22 +156,23 @@ def run_install(
     generated_dsts: list[str] = []
     merged_dsts: list[str] = []
     for dst_rel, base in base_links.items():
+        dst = _resolve_dst(dst_rel, home, claude_home)
         if dst_rel in append_links:
             srcs = [resources / base.src] + [resources / a.src for a in append_links[dst_rel]]
             rpt = _install_concat(
-                srcs=srcs, dst=home / dst_rel, dry_run=dry_run,
+                srcs=srcs, dst=dst, dry_run=dry_run,
                 previously_generated=(dst_rel in prev_generated),
             )
             if rpt.result != Result.ERROR:
                 generated_dsts.append(dst_rel)
         else:
-            rpt = _install_link(src=resources / base.src, dst=home / dst_rel, dry_run=dry_run)
+            rpt = _install_link(src=resources / base.src, dst=dst, dry_run=dry_run)
         reports.append(rpt)
         _print_line(rpt, quiet=quiet)
 
     for lnk in merge_links:
         merge_fn = _install_json_merge if lnk.mode == "merge-json" else _install_toml_merge
-        rpt = merge_fn(src=resources / lnk.src, dst=home / lnk.dst, dry_run=dry_run)
+        rpt = merge_fn(src=resources / lnk.src, dst=_resolve_dst(lnk.dst, home, claude_home), dry_run=dry_run)
         if rpt.result != Result.ERROR:
             merged_dsts.append(lnk.dst)
         reports.append(rpt)
@@ -153,7 +187,7 @@ def run_install(
     if not quiet:
         print("\nAgent skills")
     for label, target in (
-        ("Claude Code", home / ".claude" / "skills"),
+        ("Claude Code", claude_home / ".claude" / "skills"),
         ("Codex", home / ".agents" / "skills"),
     ):
         if not quiet:
