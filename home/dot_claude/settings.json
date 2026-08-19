@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "respectGitignore": true,
+  "cleanupPeriodDays": 30,
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(~/.extra)",
+      "Read(~/.extrarc)",
+      "Read(~/.aws/credentials)",
+      "Read(~/.claude/.credentials.json)"
+    ]
+  },
+  "enabledPlugins": {
+    "github@claude-plugins-official": true,
+    "pubmed@life-sciences": true,
+    "synapse@life-sciences": true,
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "life-sciences": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/life-sciences"
+      }
+    }
+  },
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "useAutoModeDuringPlan": true
+}

@@ -1,0 +1,56 @@
+#!/bin/sh
+# Back up pre-existing unmanaged dotfiles before the first apply on this machine.
+#
+# The legacy installer created <file>.dotfiles-backup.<utc-timestamp> whenever it
+# was about to replace something it did not already own (install.py:_backup_path).
+# chezmoi has no equivalent -- it overwrites silently -- so this restores the
+# safety net for the one moment it matters: the first install onto a machine that
+# already has dotfiles. run_once_ means chezmoi runs it exactly once per machine.
+#
+# Target names are derived from the source tree rather than hardcoded, so this
+# cannot drift as files are added. Nested `chezmoi` calls are NOT used: they
+# deadlock on the persistent-state lock while an apply is in progress.
+set -eu
+
+SRC="${CHEZMOI_SOURCE_DIR:?}"
+DEST="{{ .chezmoi.destDir }}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+n=0
+
+for entry in "$SRC"/*; do
+    [ -e "$entry" ] || continue
+    name="$(basename "$entry")"
+
+    case "$name" in
+        run_*|.chezmoi*) continue ;;
+    esac
+
+    # Strip chezmoi type/attribute prefixes to recover the target name.
+    while :; do
+        case "$name" in
+            encrypted_*|private_*|readonly_*|empty_*|executable_*|symlink_*|create_*|modify_*)
+                name="${name#*_}" ;;
+            *) break ;;
+        esac
+    done
+    case "$name" in
+        dot_*) target="$DEST/.${name#dot_}" ;;
+        *)     continue ;;
+    esac
+    target="${target%.tmpl}"
+
+    # Nothing there, or already ours -- nothing to preserve.
+    [ -e "$target" ] || continue
+    if [ -L "$target" ]; then
+        case "$(readlink "$target")" in "$SRC"/*) continue ;; esac
+    fi
+
+    backup="$target.dotfiles-backup.$STAMP"
+    [ -e "$backup" ] && continue
+    cp -R "$target" "$backup"
+    n=$((n + 1))
+    echo "  backed up $(basename "$target") -> $(basename "$backup")"
+done
+
+[ "$n" -gt 0 ] && echo "  ($n unmanaged file(s) preserved before first apply)"
+exit 0

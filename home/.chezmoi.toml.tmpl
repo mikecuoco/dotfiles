@@ -1,0 +1,25 @@
+{{/*
+   Profile selection.
+
+   Asked once per machine, then cached in ~/.config/chezmoi/chezmoi.toml.
+   Valid values: common | linux | codeocean
+   (macos, cluster and codespace are not yet ported.)
+
+   The prompt text is deliberately just "profile": chezmoi keys --promptString
+   by the prompt *text*, not by the data key, so this is what makes unattended
+   bootstrap read cleanly:
+
+     chezmoi init --apply --promptString profile=codeocean <repo>
+*/}}
+{{- $profile := promptStringOnce . "profile" "profile" "linux" -}}
+
+{{/*
+   symlink mode reproduces the previous installer's semantics:
+     - plain files       -> symlinked back into the source dir  (was: mode "link")
+     - templates (.tmpl) -> regular generated files             (was: mode "append")
+     - modify_ files     -> regular merged files                (was: mode "merge-*")
+*/}}
+mode = "symlink"
+
+[data]
+    profile = {{ $profile | quote }}

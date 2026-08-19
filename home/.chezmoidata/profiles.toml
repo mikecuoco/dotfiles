@@ -1,0 +1,13 @@
+# Flattened profile inheritance.
+#
+# The previous implementation resolved this graph at runtime
+# (profiles.py:resolve_links — recursive collect, dedup-by-dst, orphan and
+# merge-conflict validation, ~60 lines). With five profiles the transitive
+# closure is more readable written out than computed.
+#
+# Order is parent-first, matching the old depth-first resolution order.
+
+[layers]
+    common    = ["common"]
+    linux     = ["common", "linux"]
+    codeocean = ["common", "linux", "codeocean"]
