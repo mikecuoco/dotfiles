@@ -196,92 +196,108 @@ def plan_legacy_migration(repo: Path, apply: bool = False) -> list[MigrationActi
         for source in sorted(legacy_dir.rglob("*")):
             if source.is_dir() and not source.is_symlink():
                 continue
-            source_relative = source.relative_to(root).as_posix()
-            if source.is_symlink() or not source.is_file() or source.suffix != ".md":
-                actions.append(
-                    MigrationAction(
-                        source_relative,
-                        None,
-                        "review",
-                        "only regular Markdown files can migrate automatically",
-                    )
-                )
-                continue
-
-            try:
-                data = source.read_bytes()
-                text = data.decode("utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                actions.append(
-                    MigrationAction(source_relative, None, "review", f"cannot read: {exc}")
-                )
-                continue
-
-            if len(_SESSION_HEADING_RE.findall(text)) >= 2:
-                actions.append(
-                    MigrationAction(
-                        source_relative,
-                        None,
-                        "review",
-                        "session summary must be split into topic memories manually",
-                    )
-                )
-                continue
-
-            target_name = _migration_name(source.stem)
-            target = target_dir / target_name
-            candidate_errors = _memory_text_errors(target_name, text, len(data))
-            if candidate_errors:
-                actions.append(
-                    MigrationAction(
-                        source_relative,
-                        target.relative_to(root).as_posix(),
-                        "review",
-                        "; ".join(candidate_errors),
-                    )
-                )
-                continue
-
-            digest = hashlib.sha256(data).hexdigest()
-            target_relative = target.relative_to(root).as_posix()
-            if target.is_symlink():
-                action = "conflict"
-                message = "target is a symlink"
-            elif target.exists():
-                try:
-                    same = target.is_file() and target.read_bytes() == data
-                except OSError:
-                    same = False
-                action = "duplicate" if same else "conflict"
-                message = "already migrated" if same else "target has different content"
-            elif target_relative in planned:
-                same = planned[target_relative] == digest
-                action = "duplicate" if same else "conflict"
-                message = "duplicate legacy copy" if same else "two sources map to one target"
-            else:
-                planned[target_relative] = digest
-                action = "migrate"
-                message = "would copy" if not apply else "copied"
-                if apply:
-                    ignored = _is_git_ignored(root, MEMORY_RELATIVE / ".ignore-probe")
-                    if ignored is not True:
-                        planned.pop(target_relative, None)
-                        action = "review"
-                        message = "target Git ignore rule could not be verified"
-                    else:
-                        try:
-                            initialize_project_memory(root)
-                            _write_exclusive(target, data)
-                        except OSError as exc:
-                            planned.pop(target_relative, None)
-                            action = "review"
-                            message = f"copy failed safely: {exc}"
-
-            actions.append(
-                MigrationAction(source_relative, target_relative, action, message)
-            )
+            actions.append(_plan_one_source(source, root, target_dir, planned, apply))
 
     return actions
+
+
+def _plan_one_source(
+    source: Path,
+    root: Path,
+    target_dir: Path,
+    planned: dict[str, str],
+    apply: bool,
+) -> MigrationAction:
+    """Plan (and optionally perform) the migration of one legacy file.
+
+    *planned* is updated in place so that two legacy sources mapping to the same
+    target are reported as a conflict rather than silently overwriting.
+    """
+    source_relative = source.relative_to(root).as_posix()
+    if source.is_symlink() or not source.is_file() or source.suffix != ".md":
+        return MigrationAction(
+            source_relative,
+            None,
+            "review",
+            "only regular Markdown files can migrate automatically",
+        )
+
+    try:
+        data = source.read_bytes()
+        text = data.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return MigrationAction(source_relative, None, "review", f"cannot read: {exc}")
+
+    if len(_SESSION_HEADING_RE.findall(text)) >= 2:
+        return MigrationAction(
+            source_relative,
+            None,
+            "review",
+            "session summary must be split into topic memories manually",
+        )
+
+    target_name = _migration_name(source.stem)
+    target = target_dir / target_name
+    target_relative = target.relative_to(root).as_posix()
+
+    candidate_errors = _memory_text_errors(target_name, text, len(data))
+    if candidate_errors:
+        return MigrationAction(
+            source_relative, target_relative, "review", "; ".join(candidate_errors)
+        )
+
+    if target.is_symlink():
+        return MigrationAction(
+            source_relative, target_relative, "conflict", "target is a symlink"
+        )
+
+    if target.exists():
+        try:
+            same = target.is_file() and target.read_bytes() == data
+        except OSError:
+            same = False
+        return MigrationAction(
+            source_relative,
+            target_relative,
+            "duplicate" if same else "conflict",
+            "already migrated" if same else "target has different content",
+        )
+
+    digest = hashlib.sha256(data).hexdigest()
+    if target_relative in planned:
+        same = planned[target_relative] == digest
+        return MigrationAction(
+            source_relative,
+            target_relative,
+            "duplicate" if same else "conflict",
+            "duplicate legacy copy" if same else "two sources map to one target",
+        )
+
+    planned[target_relative] = digest
+    if not apply:
+        return MigrationAction(
+            source_relative, target_relative, "migrate", "would copy"
+        )
+
+    if _is_git_ignored(root, MEMORY_RELATIVE / ".ignore-probe") is not True:
+        planned.pop(target_relative, None)
+        return MigrationAction(
+            source_relative,
+            target_relative,
+            "review",
+            "target Git ignore rule could not be verified",
+        )
+
+    try:
+        initialize_project_memory(root)
+        _write_exclusive(target, data)
+    except OSError as exc:
+        planned.pop(target_relative, None)
+        return MigrationAction(
+            source_relative, target_relative, "review", f"copy failed safely: {exc}"
+        )
+
+    return MigrationAction(source_relative, target_relative, "migrate", "copied")
 
 
 def run_memory_init(repo: Path) -> int:

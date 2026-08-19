@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from .profiles import compose_sources, load_profiles, resolve_links
+
 # Budget thresholds (estimated tokens, warnings only — not hard failures)
 GLOBAL_BUDGET = 900
 OVERLAY_BUDGET = 500
@@ -56,8 +58,6 @@ def _instruction_sources(
     profile_name: str,
     destination: str,
 ) -> list[Path]:
-    from .profiles import load_profiles, resolve_links
-
     profiles = load_profiles(resources)
     return [
         resources / link.src
@@ -66,14 +66,9 @@ def _instruction_sources(
     ]
 
 
-def _compose(sources: list[Path]) -> str:
-    return "\n\n".join(path.read_text() for path in sources)
-
-
 def run_agent_stats(resources_dir: Optional[Path] = None) -> int:
     """Print agent context budgets. Returns 0 when every layer is in budget."""
     from . import RESOURCES_DIR
-    from .profiles import load_profiles
 
     resources = resources_dir or RESOURCES_DIR
     profiles = load_profiles(resources)
@@ -92,7 +87,7 @@ def run_agent_stats(resources_dir: Optional[Path] = None) -> int:
             print(f"Error: instruction source not found for {detail}", file=sys.stderr)
             return 1
 
-        global_text = _compose(common_sources)
+        global_text = compose_sources(common_sources)
         global_stats = _measure(global_text)
         print()
         print(_fmt(f"{agent_name} global", global_stats, budget=GLOBAL_BUDGET))
@@ -105,9 +100,9 @@ def run_agent_stats(resources_dir: Optional[Path] = None) -> int:
             overlay_sources = sources[len(common_sources):]
             if not overlay_sources:
                 continue
-            overlay_text = _compose(overlay_sources)
+            overlay_text = compose_sources(overlay_sources)
             overlay_stats = _measure(overlay_text)
-            effective_tokens = estimate_tokens(_compose(sources))
+            effective_tokens = estimate_tokens(compose_sources(sources))
 
             print()
             print(_fmt(

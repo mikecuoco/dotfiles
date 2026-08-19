@@ -116,69 +116,48 @@ def _run_claude(args: list[str], timeout: int = 30) -> subprocess.CompletedProce
     )
 
 
-def _list_plugins() -> set[str]:
-    """Return the set of installed plugin references (``name@marketplace`` form).
+def _error_text(result: subprocess.CompletedProcess) -> str:
+    """Return a short, single-line description of a failed claude invocation."""
+    return (result.stderr or result.stdout or "unknown error").strip()[:200]
 
-    Returns an empty set if the command fails or times out.
+
+def _first_tokens(args: list[str]) -> set[str]:
+    """Return the first whitespace token of each non-blank output line.
+
+    Returns an empty set if the command fails or times out, so every caller
+    degrades to "nothing is installed" rather than raising.
     """
     try:
-        result = _run_claude(["plugin", "list"])
+        result = _run_claude(args)
     except (subprocess.TimeoutExpired, OSError):
         return set()
 
     if result.returncode != 0:
         return set()
 
-    installed: set[str] = set()
-    for line in result.stdout.splitlines():
-        token = line.strip().split()[0] if line.strip() else ""
-        if "@" in token:
-            installed.add(token)
-    return installed
+    return {
+        line.split()[0]
+        for line in result.stdout.splitlines()
+        if line.strip()
+    }
+
+
+def _list_plugins() -> set[str]:
+    """Return installed plugin references, in ``name@marketplace`` form."""
+    return {token for token in _first_tokens(["plugin", "list"]) if "@" in token}
 
 
 def _list_marketplaces() -> set[str]:
-    """Return the set of registered marketplace names/aliases.
-
-    Returns an empty set if the command fails or times out.
-    """
-    try:
-        result = _run_claude(["plugin", "marketplace", "list"])
-    except (subprocess.TimeoutExpired, OSError):
-        return set()
-
-    if result.returncode != 0:
-        return set()
-
-    names: set[str] = set()
-    for line in result.stdout.splitlines():
-        token = line.strip().split()[0] if line.strip() else ""
-        if token:
-            names.add(token)
-    return names
+    """Return the set of registered marketplace names/aliases."""
+    return _first_tokens(["plugin", "marketplace", "list"])
 
 
 def _list_mcp_servers() -> set[str]:
-    """Return the set of configured MCP server names.
-
-    Returns an empty set if the command fails or times out.
-    """
-    try:
-        result = _run_claude(["mcp", "list"])
-    except (subprocess.TimeoutExpired, OSError):
-        return set()
-
-    if result.returncode != 0:
-        return set()
-
-    names: set[str] = set()
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            token = line.split()[0]
-            if token:
-                names.add(token)
-    return names
+    """Return the set of configured MCP server names, ignoring comment lines."""
+    return {
+        token for token in _first_tokens(["mcp", "list"])
+        if not token.startswith("#")
+    }
 
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -279,8 +258,10 @@ def _register_marketplace(alias: str, source: str) -> None:
     if result.returncode == 0:
         print(f"  → registered marketplace: {alias}")
     else:
-        err = (result.stderr or result.stdout or "unknown error").strip()[:200]
-        print(f"  ✗ failed to register marketplace {alias!r}: {err}", file=sys.stderr)
+        print(
+            f"  ✗ failed to register marketplace {alias!r}: {_error_text(result)}",
+            file=sys.stderr,
+        )
 
 
 def _process_one(
@@ -312,28 +293,55 @@ def _process_one(
     )
 
 
+def _ensure_integration(
+    spec: IntegrationSpec,
+    already_present: bool,
+    dry_run: bool,
+    argv: list[str],
+    *,
+    verb: str,
+    done: str,
+    fail_prefix: str,
+) -> PluginStatus:
+    """Run *argv* through the claude CLI unless *spec* is already in place.
+
+    *verb* is the base form used in the dry-run message ("install"), *done* its
+    past participle ("installed"), and *fail_prefix* labels a failure
+    ("install failed" / "mcp add failed").
+    """
+    def status(installed: bool, message: str) -> PluginStatus:
+        return PluginStatus(spec.name, spec.type, installed, message, spec.auth_hint)
+
+    if already_present:
+        return status(True, f"already {done}")
+    if dry_run:
+        return status(False, f"would {verb}")
+
+    try:
+        result = _run_claude(argv)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return status(False, f"{fail_prefix}: {exc}")
+
+    if result.returncode == 0:
+        return status(True, done)
+    return status(False, f"{fail_prefix}: {_error_text(result)}")
+
+
 def _process_plugin(
     spec: IntegrationSpec,
     installed_plugins: set[str],
     dry_run: bool,
 ) -> PluginStatus:
     ref = f"{spec.name}@{spec.marketplace}"
-    if ref in installed_plugins:
-        return PluginStatus(spec.name, spec.type, True, "already installed", spec.auth_hint)
-
-    if dry_run:
-        return PluginStatus(spec.name, spec.type, False, "would install", spec.auth_hint)
-
-    try:
-        result = _run_claude(["plugin", "install", ref, "--scope", "user"])
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return PluginStatus(spec.name, spec.type, False, f"install failed: {exc}", spec.auth_hint)
-
-    if result.returncode == 0:
-        return PluginStatus(spec.name, spec.type, True, "installed", spec.auth_hint)
-
-    err = (result.stderr or result.stdout or "unknown error").strip()[:200]
-    return PluginStatus(spec.name, spec.type, False, f"install failed: {err}", spec.auth_hint)
+    return _ensure_integration(
+        spec,
+        ref in installed_plugins,
+        dry_run,
+        ["plugin", "install", ref, "--scope", "user"],
+        verb="install",
+        done="installed",
+        fail_prefix="install failed",
+    )
 
 
 def _process_mcp_http(
@@ -341,27 +349,16 @@ def _process_mcp_http(
     configured_mcps: set[str],
     dry_run: bool,
 ) -> PluginStatus:
-    if spec.name in configured_mcps:
-        return PluginStatus(spec.name, spec.type, True, "already configured", spec.auth_hint)
-
-    if dry_run:
-        return PluginStatus(spec.name, spec.type, False, "would configure", spec.auth_hint)
-
-    try:
-        result = _run_claude([
-            "mcp", "add",
-            "--transport", "http",
-            "--scope", "user",
-            spec.name, spec.url,
-        ])
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return PluginStatus(spec.name, spec.type, False, f"mcp add failed: {exc}", spec.auth_hint)
-
-    if result.returncode == 0:
-        return PluginStatus(spec.name, spec.type, True, "configured", spec.auth_hint)
-
-    err = (result.stderr or result.stdout or "unknown error").strip()[:200]
-    return PluginStatus(spec.name, spec.type, False, f"mcp add failed: {err}", spec.auth_hint)
+    return _ensure_integration(
+        spec,
+        spec.name in configured_mcps,
+        dry_run,
+        ["mcp", "add", "--transport", "http", "--scope", "user",
+         spec.name, spec.url],
+        verb="configure",
+        done="configured",
+        fail_prefix="mcp add failed",
+    )
 
 
 def _process_mcp_stdio(
@@ -369,39 +366,25 @@ def _process_mcp_stdio(
     configured_mcps: set[str],
     dry_run: bool,
 ) -> PluginStatus:
-    if spec.name in configured_mcps:
-        return PluginStatus(spec.name, spec.type, True, "already configured", spec.auth_hint)
-
-    if dry_run:
-        return PluginStatus(spec.name, spec.type, False, "would configure", spec.auth_hint)
-
-    # Check that the required binary is on PATH before attempting to register it.
-    if not shutil.which(spec.command):
+    # The PATH check runs after the already-configured and dry-run short
+    # circuits, so a missing binary is only reported when we would really add it.
+    if spec.name not in configured_mcps and not dry_run and not shutil.which(spec.command):
         return PluginStatus(
             spec.name, spec.type, False,
             f"command not found: {spec.command!r} — install it first",
             spec.auth_hint,
         )
 
-    cmd_args = [
-        "mcp", "add",
-        "--transport", "stdio",
-        "--scope", "user",
-        spec.name,
-        "--",
-        spec.command,
-        *spec.args,
-    ]
-    try:
-        result = _run_claude(cmd_args)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return PluginStatus(spec.name, spec.type, False, f"mcp add failed: {exc}", spec.auth_hint)
-
-    if result.returncode == 0:
-        return PluginStatus(spec.name, spec.type, True, "configured", spec.auth_hint)
-
-    err = (result.stderr or result.stdout or "unknown error").strip()[:200]
-    return PluginStatus(spec.name, spec.type, False, f"mcp add failed: {err}", spec.auth_hint)
+    return _ensure_integration(
+        spec,
+        spec.name in configured_mcps,
+        dry_run,
+        ["mcp", "add", "--transport", "stdio", "--scope", "user",
+         spec.name, "--", spec.command, *spec.args],
+        verb="configure",
+        done="configured",
+        fail_prefix="mcp add failed",
+    )
 
 
 def _print_status_line(status: PluginStatus, dry_run: bool) -> None:

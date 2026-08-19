@@ -181,6 +181,20 @@ def _run_git(args: list[str], timeout: int = 120) -> subprocess.CompletedProcess
     )
 
 
+def _try_git(args: list[str], label: str) -> bool:
+    """Run a git command, printing ``✗ <label> failed: …`` on any failure."""
+    try:
+        result = _run_git(args)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(f"  ✗ {label} failed: {exc}", file=sys.stderr)
+        return False
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "unknown error").strip()[:200]
+        print(f"  ✗ {label} failed: {err}", file=sys.stderr)
+        return False
+    return True
+
+
 def _ensure_repo(repo_url: str, cache_dir: Path) -> bool:
     """Clone or fast-forward-pull the bioSkills repo into *cache_dir*.
 
@@ -193,29 +207,15 @@ def _ensure_repo(repo_url: str, cache_dir: Path) -> bool:
 
     if (cache_dir / ".git").exists():
         # Already cloned — attempt a fast-forward pull.
-        try:
-            result = _run_git(["-C", str(cache_dir), "pull", "--ff-only", "--quiet"])
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            print(f"  ✗ git pull failed: {exc}", file=sys.stderr)
-            return False
-        if result.returncode != 0:
-            err = (result.stderr or result.stdout or "unknown error").strip()[:200]
-            print(f"  ✗ git pull failed: {err}", file=sys.stderr)
-            return False
-        return True
+        return _try_git(
+            ["-C", str(cache_dir), "pull", "--ff-only", "--quiet"], "git pull"
+        )
 
     # First-time clone (shallow for speed).
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        result = _run_git(["clone", "--depth=1", "--quiet", repo_url, str(cache_dir)])
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        print(f"  ✗ git clone failed: {exc}", file=sys.stderr)
-        return False
-    if result.returncode != 0:
-        err = (result.stderr or result.stdout or "unknown error").strip()[:200]
-        print(f"  ✗ git clone failed: {err}", file=sys.stderr)
-        return False
-    return True
+    return _try_git(
+        ["clone", "--depth=1", "--quiet", repo_url, str(cache_dir)], "git clone"
+    )
 
 
 # ── Skill discovery ───────────────────────────────────────────────────────────
@@ -323,8 +323,12 @@ def _destination_path(skill_dir: Path, relative: str) -> Path:
     return skill_dir.joinpath(*PurePosixPath(relative).parts)
 
 
-def _prepare_destination_parent(skill_dir: Path, relative: str) -> Path:
-    """Create destination parents while refusing nested symlink traversal."""
+def _walk_destination(skill_dir: Path, relative: str, *, create: bool) -> Path:
+    """Resolve *relative* under *skill_dir*, refusing symlink traversal.
+
+    When *create* is true each intermediate directory is created as it is
+    validated; otherwise the path is only inspected.
+    """
     destination = _destination_path(skill_dir, relative)
     current = skill_dir
     for part in PurePosixPath(relative).parts[:-1]:
@@ -333,21 +337,19 @@ def _prepare_destination_parent(skill_dir: Path, relative: str) -> Path:
             raise OSError(f"refusing nested symlink in managed skill: {current}")
         if current.exists() and not current.is_dir():
             raise OSError(f"managed skill parent is not a directory: {current}")
-        current.mkdir(exist_ok=True)
+        if create:
+            current.mkdir(exist_ok=True)
     return destination
+
+
+def _prepare_destination_parent(skill_dir: Path, relative: str) -> Path:
+    """Create destination parents while refusing nested symlink traversal."""
+    return _walk_destination(skill_dir, relative, create=True)
 
 
 def _validate_destination(skill_dir: Path, relative: str) -> Path:
     """Validate an existing destination path without creating or changing it."""
-    destination = _destination_path(skill_dir, relative)
-    current = skill_dir
-    for part in PurePosixPath(relative).parts[:-1]:
-        current = current / part
-        if current.is_symlink():
-            raise OSError(f"refusing nested symlink in managed skill: {current}")
-        if current.exists() and not current.is_dir():
-            raise OSError(f"managed skill parent is not a directory: {current}")
-    return destination
+    return _walk_destination(skill_dir, relative, create=False)
 
 
 def _same_file(src: Path, dst: Path) -> bool:
@@ -384,6 +386,133 @@ def _prune_empty_parents(path: Path, stop: Path) -> None:
         parent = parent.parent
 
 
+def _bundled_status(name: str, installed: bool, message: str) -> SkillStatus:
+    return SkillStatus(name, "first-party", installed, message)
+
+
+def _install_bundled_skill(
+    source: Path,
+    target_dir: Path,
+    registry: dict[str, list[str]],
+    updated_registry: dict[str, list[str]],
+    dry_run: bool,
+) -> SkillStatus:
+    """Install or refresh one bundled skill directory.
+
+    Records the files it owns in *updated_registry* on success.
+    """
+    name = source.name
+    destination = target_dir / name
+    managed = name in registry
+
+    try:
+        metadata = _read_skill_metadata(source / "SKILL.md")
+        if metadata.name != name:
+            raise ValueError(
+                f"folder name {name!r} does not match metadata name {metadata.name!r}"
+            )
+    except ValueError as exc:
+        return _bundled_status(name, False, f"invalid skill: {exc}")
+
+    if (destination.exists() or destination.is_symlink()) and not managed:
+        return _bundled_status(
+            name, False, "conflict: existing skill is not managed by dotfiles"
+        )
+
+    if managed and (
+        destination.is_symlink() or (destination.exists() and not destination.is_dir())
+    ):
+        return _bundled_status(
+            name, False, "conflict: managed skill path is not a directory"
+        )
+
+    source_files = _skill_files(source)
+    previous_files = set(registry.get(name, []))
+    action = _bundled_action(source_files, previous_files, destination)
+
+    try:
+        # Check the whole update before copying so a newly bundled path can
+        # never overwrite a user-created file inside a managed skill.
+        for rel in source_files:
+            dst = _validate_destination(destination, rel)
+            if rel not in previous_files and (dst.exists() or dst.is_symlink()):
+                raise OSError(f"unmanaged file conflicts with bundled path: {dst}")
+    except OSError as exc:
+        return _bundled_status(name, False, f"copy failed: {exc}")
+
+    if dry_run:
+        message = "already installed" if action == "unchanged" else f"would {action}"
+        return _bundled_status(name, True, message)
+
+    try:
+        destination.mkdir(parents=True, exist_ok=True)
+        for rel, src in source_files.items():
+            dst = _prepare_destination_parent(destination, rel)
+            if _same_file(src, dst):
+                continue
+            if dst.is_symlink():
+                dst.unlink()
+            shutil.copy2(src, dst)
+
+        for rel in previous_files - set(source_files):
+            obsolete = _destination_path(destination, rel)
+            if obsolete.is_file() or obsolete.is_symlink():
+                obsolete.unlink()
+                _prune_empty_parents(obsolete, destination)
+
+        updated_registry[name] = sorted(source_files)
+    except OSError as exc:
+        return _bundled_status(name, False, f"copy failed: {exc}")
+
+    messages = {
+        "install": "installed",
+        "update": "updated",
+        "unchanged": "already installed",
+    }
+    return _bundled_status(name, True, messages[action])
+
+
+def _remove_stale_bundled_skill(
+    name: str,
+    target_dir: Path,
+    registry: dict[str, list[str]],
+    updated_registry: dict[str, list[str]],
+    dry_run: bool,
+) -> SkillStatus:
+    """Remove a skill this dotfiles version no longer ships.
+
+    Only registry-owned files are deleted, so user-created files in the same
+    directory survive the migration.
+    """
+    destination = target_dir / name
+
+    if dry_run:
+        return _bundled_status(name, True, "would remove")
+
+    try:
+        if destination.is_symlink() or (
+            destination.exists() and not destination.is_dir()
+        ):
+            raise OSError(
+                f"refusing managed skill path that is not a directory: {destination}"
+            )
+        for rel in registry[name]:
+            obsolete = _validate_destination(destination, rel)
+            if obsolete.is_file() or obsolete.is_symlink():
+                obsolete.unlink()
+                _prune_empty_parents(obsolete, destination)
+        if destination.is_dir():
+            try:
+                destination.rmdir()
+            except OSError:
+                pass
+        updated_registry.pop(name, None)
+    except OSError as exc:
+        return _bundled_status(name, False, f"remove failed: {exc}")
+
+    return _bundled_status(name, True, "removed")
+
+
 def run_bundled_skills_setup(
     resources_dir: Path,
     target_dir: Optional[Path] = None,
@@ -400,144 +529,24 @@ def run_bundled_skills_setup(
     updated_registry = dict(registry)
     statuses: list[SkillStatus] = []
 
+    def record(status: SkillStatus) -> None:
+        statuses.append(status)
+        if not quiet:
+            _print_skill_status(status)
+
     for source in sources:
-        name = source.name
-        destination = target_dir / name
-        managed = name in registry
-
-        try:
-            metadata = _read_skill_metadata(source / "SKILL.md")
-            if metadata.name != name:
-                raise ValueError(
-                    f"folder name {name!r} does not match metadata name {metadata.name!r}"
-                )
-        except ValueError as exc:
-            status = SkillStatus(name, "first-party", False, f"invalid skill: {exc}")
-            statuses.append(status)
-            if not quiet:
-                _print_skill_status(status)
-            continue
-
-        if (destination.exists() or destination.is_symlink()) and not managed:
-            status = SkillStatus(
-                name,
-                "first-party",
-                False,
-                "conflict: existing skill is not managed by dotfiles",
+        record(
+            _install_bundled_skill(
+                source, target_dir, registry, updated_registry, dry_run
             )
-            statuses.append(status)
-            if not quiet:
-                _print_skill_status(status)
-            continue
+        )
 
-        if managed and (destination.is_symlink() or (destination.exists() and not destination.is_dir())):
-            status = SkillStatus(
-                name,
-                "first-party",
-                False,
-                "conflict: managed skill path is not a directory",
-            )
-            statuses.append(status)
-            if not quiet:
-                _print_skill_status(status)
-            continue
-
-        source_files = _skill_files(source)
-        previous_files = set(registry.get(name, []))
-        action = _bundled_action(source_files, previous_files, destination)
-
-        try:
-            # Check the whole update before copying so a newly bundled path can
-            # never overwrite a user-created file inside a managed skill.
-            for rel in source_files:
-                dst = _validate_destination(destination, rel)
-                if rel not in previous_files and (dst.exists() or dst.is_symlink()):
-                    raise OSError(f"unmanaged file conflicts with bundled path: {dst}")
-        except OSError as exc:
-            status = SkillStatus(name, "first-party", False, f"copy failed: {exc}")
-            statuses.append(status)
-            if not quiet:
-                _print_skill_status(status)
-            continue
-
-        if dry_run:
-            message = "already installed" if action == "unchanged" else f"would {action}"
-            status = SkillStatus(name, "first-party", True, message)
-            statuses.append(status)
-            if not quiet:
-                _print_skill_status(status)
-            continue
-
-        try:
-            destination.mkdir(parents=True, exist_ok=True)
-            for rel, src in source_files.items():
-                dst = _prepare_destination_parent(destination, rel)
-                if _same_file(src, dst):
-                    continue
-                if dst.is_symlink():
-                    dst.unlink()
-                shutil.copy2(src, dst)
-
-            for rel in previous_files - set(source_files):
-                obsolete = _destination_path(destination, rel)
-                if obsolete.is_file() or obsolete.is_symlink():
-                    obsolete.unlink()
-                    _prune_empty_parents(obsolete, destination)
-
-            updated_registry[name] = sorted(source_files)
-        except OSError as exc:
-            status = SkillStatus(name, "first-party", False, f"copy failed: {exc}")
-        else:
-            messages = {
-                "install": "installed",
-                "update": "updated",
-                "unchanged": "already installed",
-            }
-            status = SkillStatus(name, "first-party", True, messages[action])
-
-        statuses.append(status)
-        if not quiet:
-            _print_skill_status(status)
-
-    # Remove bundled skills that this dotfiles version no longer ships. Only
-    # registry-owned files are deleted, so user-created files in the same
-    # directory survive the migration.
     for name in sorted(set(registry) - source_names):
-        destination = target_dir / name
-
-        if dry_run:
-            status = SkillStatus(name, "first-party", True, "would remove")
-            statuses.append(status)
-            if not quiet:
-                _print_skill_status(status)
-            continue
-
-        try:
-            if destination.is_symlink() or (
-                destination.exists() and not destination.is_dir()
-            ):
-                raise OSError(
-                    f"refusing managed skill path that is not a directory: {destination}"
-                )
-            for rel in registry[name]:
-                obsolete = _validate_destination(destination, rel)
-                if obsolete.is_file() or obsolete.is_symlink():
-                    obsolete.unlink()
-                    _prune_empty_parents(obsolete, destination)
-            if destination.is_dir():
-                try:
-                    destination.rmdir()
-                except OSError:
-                    pass
-            updated_registry.pop(name, None)
-        except OSError as exc:
-            status = SkillStatus(name, "first-party", False, f"remove failed: {exc}")
-        else:
-            status = SkillStatus(name, "first-party", True, "removed")
-
-        statuses.append(status)
-        if not quiet:
-            _print_skill_status(status)
+        record(
+            _remove_stale_bundled_skill(
+                name, target_dir, registry, updated_registry, dry_run
+            )
+        )
 
     if not dry_run and updated_registry != registry:
         _write_managed_skills(target_dir, updated_registry)
@@ -732,43 +741,27 @@ def check_skill_statuses(target_dir: Optional[Path] = None) -> list[SkillStatus]
     if not target_dir.exists():
         return []
 
-    statuses: list[SkillStatus] = []
-    for name in sorted(_read_managed_skills(target_dir)):
-        skill_md = target_dir / name / "SKILL.md"
-        try:
-            metadata = _read_skill_metadata(skill_md)
-        except ValueError as exc:
-            statuses.append(
-                SkillStatus(name, "first-party", False, f"invalid skill: {exc}")
-            )
-            continue
-        installed = metadata.name == name
-        statuses.append(
-            SkillStatus(
-                name,
-                "first-party",
-                installed,
-                "installed" if installed else "metadata name does not match directory",
-            )
-        )
-
-    for skill_file in sorted(target_dir.glob("bio-*/SKILL.md")):
-        name = skill_file.parent.name
-        try:
-            metadata = _read_skill_metadata(skill_file)
-        except ValueError as exc:
-            statuses.append(
-                SkillStatus(name, "bioinformatics", False, f"invalid skill: {exc}")
-            )
-            continue
-        installed = metadata.name == name
-        statuses.append(
-            SkillStatus(
-                name,
-                "bioinformatics",
-                installed,
-                "installed" if installed else "metadata name does not match directory",
-            )
-        )
-
+    statuses = [
+        _installed_status(name, target_dir / name / "SKILL.md", "first-party")
+        for name in sorted(_read_managed_skills(target_dir))
+    ]
+    statuses.extend(
+        _installed_status(skill_file.parent.name, skill_file, "bioinformatics")
+        for skill_file in sorted(target_dir.glob("bio-*/SKILL.md"))
+    )
     return statuses
+
+
+def _installed_status(name: str, skill_md: Path, category: str) -> SkillStatus:
+    """Report whether an installed SKILL.md parses and matches its directory."""
+    try:
+        metadata = _read_skill_metadata(skill_md)
+    except ValueError as exc:
+        return SkillStatus(name, category, False, f"invalid skill: {exc}")
+    installed = metadata.name == name
+    return SkillStatus(
+        name,
+        category,
+        installed,
+        "installed" if installed else "metadata name does not match directory",
+    )
