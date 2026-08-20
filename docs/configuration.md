@@ -139,5 +139,9 @@ to trip over:
   `init --promptString` nor `init --force` can change it. `$DOTFILES_PROFILE` is
   the supported override and is what `--profile` sets.
 
+The `cluster` profile assumes no root: see
+[the CLI reference](cli-reference.md#without-root-hpc-login-nodes) for the
+rootless bootstrap, and note that the Python CLI is optional there.
+
 Verify changes with the full suite; `tests/test_chezmoi_render.py` applies every
 profile into a throwaway destination and checks the results and idempotency.

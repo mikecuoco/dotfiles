@@ -20,6 +20,29 @@ interactive prompts. Omit it to be asked. From a local checkout, use
 `chezmoi init --apply --source <path>` instead; the source directory is
 remembered afterwards.
 
+#### Without root (HPC login nodes)
+
+chezmoi is a single static binary and needs no privileges:
+
+```bash
+sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+"$HOME/.local/bin/chezmoi" init --apply --promptString profile=cluster \
+    https://github.com/mikecuoco/dotfiles.git
+```
+
+Call it by full path the first time: `~/.local/bin` only joins `PATH` once
+`~/.exports` is installed, which is what this command is doing.
+
+Two things the installer handles that matter on older login nodes. It checks
+`ldd` and falls back to a fully static musl build when glibc is older than
+2.35, so CentOS 7 (glibc 2.17) works. And chezmoi has a built-in git client, so
+`init <repo>` does not require `git` on `PATH`.
+
+The `dotfiles` CLI is **optional here.** `chezmoi apply` installs the same
+files, agent skills included — the CLI only adds the Code Ocean two-pass, which
+a cluster never uses, plus `doctor`, `auth`, `memory` and `claude`. Install it
+with `uv tool install`, also rootless, if you want those.
+
 ### Day-to-day
 
 ```bash
