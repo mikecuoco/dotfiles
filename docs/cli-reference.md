@@ -5,29 +5,75 @@ command's options, and `dotfiles --version` for the installed package version.
 
 ## Install and update
 
+### First-time bootstrap
+
+Dotfiles are installed by [chezmoi](https://www.chezmoi.io), which must be
+pointed at this repository once per machine:
+
 ```bash
-dotfiles install [--profile PROFILE] [--dry-run] [--quiet] [--home DIR]
+chezmoi init --apply --promptString profile=codeocean \
+    https://github.com/mikecuoco/dotfiles.git
+```
+
+`--promptString` keeps unattended bootstrap (Code Ocean capsules, CI) free of
+interactive prompts. Omit it to be asked. From a local checkout, use
+`chezmoi init --apply --source <path>` instead; the source directory is
+remembered afterwards.
+
+#### Without root (HPC login nodes)
+
+chezmoi is a single static binary and needs no privileges:
+
+```bash
+sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+"$HOME/.local/bin/chezmoi" init --apply --promptString profile=cluster \
+    https://github.com/mikecuoco/dotfiles.git
+```
+
+Call it by full path the first time: `~/.local/bin` only joins `PATH` once
+`~/.exports` is installed, which is what this command is doing.
+
+Two things the installer handles that matter on older login nodes. It checks
+`ldd` and falls back to a fully static musl build when glibc is older than
+2.35, so CentOS 7 (glibc 2.17) works. And chezmoi has a built-in git client, so
+`init <repo>` does not require `git` on `PATH`.
+
+The `dotfiles` CLI is **optional here.** `chezmoi apply` installs the same
+files, agent skills included — the CLI only adds the Code Ocean two-pass, which
+a cluster never uses, plus `doctor`, `auth`, `memory` and `claude`. Install it
+with `uv tool install`, also rootless, if you want those.
+
+### Day-to-day
+
+```bash
+dotfiles install [--profile PROFILE] [--dry-run] [--quiet] [--refresh]
 dotfiles update [--profile PROFILE] [--dry-run] [--quiet]
 ```
 
-`install` installs the auto-detected profile into `~` unless `--home DIR` is
-provided. It creates symlinks for managed files, regenerates composed
-instruction files, and merges managed preferences into mutable JSON and TOML
-files without replacing unrelated settings. An unmanaged destination is first
-renamed to `<name>.dotfiles-backup.<UTC timestamp>`.
+`install` applies the active profile: symlinks for managed files, regenerated
+composed instruction files, and managed preferences merged into mutable JSON
+and TOML without replacing unrelated settings. First-party agent skills are
+ordinary managed files, so they come with it. Before the first apply on a
+machine, any unmanaged file it is about to replace is copied to
+`<name>.dotfiles-backup.<UTC timestamp>`.
 
 | Option | Meaning |
 |---|---|
-| `-p`, `--profile PROFILE` | Select `macos`, `linux`, `cluster`, `codeocean`, or `codespace` instead of automatic detection. |
-| `-n`, `--dry-run` | Report changes without writing files or installer state. |
+| `-p`, `--profile PROFILE` | Select `macos`, `linux`, `cluster`, `codeocean`, or `codespace`. Without it the configured profile is kept, or auto-detected on first run. |
+| `-n`, `--dry-run` | Report changes without writing anything. |
 | `-q`, `--quiet` | Suppress routine progress; errors still print. |
-| `--home DIR` | Install beneath another home directory; useful for tests or staging. |
+| `--refresh` | Pull the dotfiles source repository before applying. |
 
-`update` upgrades the package first, then runs `install` in a fresh Python
-process so it applies the new resources. It uses `uv tool upgrade
-mike-dotfiles` for a uv-tool installation and otherwise uses `pip` to upgrade
-from GitHub. If upgrading fails, no configuration is applied. Its profile,
-dry-run, and quiet options have the same meaning as `install`.
+On Code Ocean, `install` applies twice: once to `$HOME`, then once to
+`/root/capsule` for the agent configuration that must survive a capsule
+rebuild. chezmoi has no per-path destination, so this is a second pass with its
+own `--destination`.
+
+`update` upgrades the package first, then runs `install --refresh` in a fresh
+Python process so both the code and the dotfiles come from the new version. It
+uses `uv tool upgrade mike-dotfiles` for a uv-tool installation and otherwise
+uses `pip` to upgrade from GitHub. If upgrading fails, no configuration is
+applied.
 
 ```bash
 # See what the Code Ocean profile would change
@@ -45,19 +91,20 @@ dotfiles status
 dotfiles auth
 ```
 
-`doctor` validates managed files and installer state, requires `git` and
+`doctor` asks chezmoi which managed files are out of date, requires `git` and
 `python3`, reports optional tools, checks credentials without exposing secret
 values, and includes Claude integration and skill status where available. It
 exits nonzero if the installation is missing or unhealthy, a required tool is
 unavailable, or required Claude authentication is absent. `--json` emits the
 same report in a machine-readable form.
 
-`status` is a lightweight inventory. It prints the selected profile,
-installation time, resource location, and the state of each installed path. It
-exits nonzero when no installation state is present.
+`status` prints the active profile, the chezmoi source directory, and anything
+apply would change. It exits nonzero when nothing is installed or when managed
+files have drifted.
 
 `auth` runs only credential checks. It recognizes Claude authentication from
-environment variables or the Claude CLI; GitHub from `GH_TOKEN` or `gh`; and
+environment variables or the Claude CLI; GitHub from `GH_TOKEN`, Code Ocean's
+`GIT_ACCESS_TOKEN`, or `gh`; and
 optional Synapse, Code Ocean, AWS, OpenAI, and Mem0 credentials. It exits
 nonzero only when required Claude authentication is missing.
 
@@ -85,12 +132,13 @@ dotfiles agent-stats
 dotfiles claude-stats  # alias for agent-stats
 ```
 
-`profiles` prints every profile with its description and inheritance chain.
+`profiles` prints every profile with its description and inherited layers,
+marking the active one. The list comes from `home/.chezmoidata/profiles.toml`.
 See [Profiles](../README.md#profiles) for detection rules and installed
 overlays.
 
-`agent-stats` measures the composed instruction files for Claude and Codex,
-including profile overlays. Its token counts are estimates (`words × 4/3`),
+`agent-stats` renders the composed instruction files for Claude and Codex with
+chezmoi -- the exact bytes that get installed -- for every profile. Its token counts are estimates (`words × 4/3`),
 not results from a model tokenizer. It exits nonzero when the global
 instruction budget (900 estimated tokens) or an overlay budget (500) is
 exceeded.

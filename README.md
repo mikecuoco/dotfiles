@@ -7,30 +7,20 @@ one command wherever Python 3.8+ is available.
 ## Quick start
 
 ```bash
-# 1. Install chezmoi (required — dotfiles are applied by chezmoi)
-brew install chezmoi                                       # macOS
-# or: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b ~/.local/bin
-
-# 2. Install the dotfiles CLI
+# Install globally with uv (recommended)
 uv tool install git+https://github.com/mikecuoco/dotfiles
 
-# 3. Bootstrap chezmoi (once per machine)
-chezmoi init --apply https://github.com/mikecuoco/dotfiles.git
+# Or install a development checkout
+git clone https://github.com/mikecuoco/dotfiles && cd dotfiles
+pip install -e .
 
-# Re-apply, preview changes, check health, or upgrade and reapply
+# Install the automatically detected profile
 dotfiles install
+
+# Preview changes, check health, or upgrade and reapply configuration
 dotfiles install --dry-run
 dotfiles doctor
 dotfiles update
-```
-
-For a development checkout:
-
-```bash
-git clone https://github.com/mikecuoco/dotfiles && cd dotfiles
-pip install -e .
-chezmoi init --source .   # point chezmoi at the local checkout
-dotfiles install
 ```
 
 For legacy images that require `setup.py develop`, install `setuptools` first:

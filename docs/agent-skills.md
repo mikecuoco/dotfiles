@@ -11,39 +11,31 @@ by Claude Code and Codex:
 └── scripts/               # optional deterministic helpers
 ```
 
-First-party skills are stored under
-`src/dotfiles/resources/common/agents/skills/`. A normal `dotfiles install`
-copies them to both personal discovery locations:
+First-party skills live in the chezmoi source at `home/dot_claude/skills/` and
+install like any other managed file — `chezmoi apply` (or `dotfiles install`)
+puts them in `~/.claude/skills/`.
 
-- Claude Code: `~/.claude/skills/`
-- Codex: `~/.agents/skills/`
+`~/.agents/skills` is a managed symlink to that directory, so Codex reads the
+same tree. The two used to be independent copies kept in step by the installer;
+linking them removes the possibility of drift and means anything writing skills
+has one destination rather than two.
 
-## Optional GPTomics skills
+## Adding a skill
 
-```bash
-dotfiles skills install [--with GROUP]... [--dry-run]
-dotfiles skills update [--with GROUP]... [--dry-run]
-dotfiles skills status
-```
+Create a directory under `home/dot_claude/skills/` and re-run `dotfiles
+install`. `dotfiles doctor` reports every installed skill and flags any whose
+`SKILL.md` fails to parse or whose metadata `name` does not match its directory
+— a mismatch stops the agent loading it.
 
-Both install and update include the default RNA-seq and single-cell group. Add
-`--with spatial` or `--with genomics` as needed. Downloaded source is cached in
-`~/.local/share/dotfiles/bioskills`; installed copies use the same directory
-layout for both agents and receive namespaced metadata names.
-
-The `all` group contains 561 skills and can crowd each agent's discovery
-catalog. It therefore requires an explicit acknowledgement:
-
-```bash
-dotfiles skills install --with all --allow-large
-```
-
-`--dry-run` reports intended work without copying or downloading anything.
-`skills status` validates installed metadata and reports both agent locations.
+> **Removed:** the GPTomics bioSkills integration (`dotfiles skills
+> install|update|status`) was dropped. Installing the full catalogue cost
+> roughly 71,000 estimated tokens of skill-discovery context across 562 skills,
+> which every session paid for. The implementation is in git history if it is
+> wanted again.
 
 ## Authoring rules
 
-- Put cross-agent skills under `resources/common/agents/skills/`.
+- Put cross-agent skills under `home/dot_claude/skills/`.
 - Use only portable `name` and `description` frontmatter in `SKILL.md`.
 - Put Codex-only UI metadata under `agents/openai.yaml`.
 - Avoid Claude-specific substitutions in shared instructions. Refer to the

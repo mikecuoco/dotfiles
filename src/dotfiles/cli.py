@@ -13,24 +13,6 @@ def _add_dry_run(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_skills_args(parser: argparse.ArgumentParser, verb: str) -> None:
-    """Add the flags shared by ``skills install`` and ``skills update``."""
-    parser.add_argument(
-        "--with",
-        dest="extra_groups",
-        action="append",
-        default=[],
-        metavar="GROUP",
-        help=f"Additional skill group to {verb}: spatial | genomics | all (repeatable)",
-    )
-    parser.add_argument(
-        "--allow-large",
-        action="store_true",
-        help="Allow the 561-skill 'all' group despite discovery-context costs",
-    )
-    _add_dry_run(parser)
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dotfiles",
@@ -54,7 +36,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--profile", "-p",
         metavar="PROFILE",
         help="Profile to install: macos | linux | cluster | codeocean | codespace "
-             "(auto-detected if omitted)",
+             "(keeps the configured profile if omitted, else auto-detected)",
     )
     _add_dry_run(p_install)
     p_install.add_argument(
@@ -63,16 +45,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Suppress routine install output; errors are still shown",
     )
     p_install.add_argument(
-        "--home",
-        metavar="DIR",
-        help="Override home directory (useful for testing)",
-    )
-    p_install.add_argument(
-        "--claude-home",
-        metavar="DIR",
-        help="Override base directory for .claude/ files and skills "
-             "(default: /root/capsule on Code Ocean when that path exists, "
-             "otherwise HOME)",
+        "--refresh",
+        action="store_true",
+        help="Pull the dotfiles source repository before applying",
     )
 
     # ── update ───────────────────────────────────────────────────────────────
@@ -133,34 +108,6 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "claude-stats",
         help="Alias for agent-stats",
-    )
-
-    # ── skills ───────────────────────────────────────────────────────────────
-    p_skills = sub.add_parser(
-        "skills",
-        help="Manage bundled and GPTomics skills for Claude Code and Codex",
-    )
-    skills_sub = p_skills.add_subparsers(
-        dest="skills_command",
-        metavar="SUBCOMMAND",
-    )
-    skills_sub.required = True
-    # Let the skills handler raise usage errors against this subparser, so the
-    # printed "usage:" line stays scoped to `dotfiles skills`.
-    p_skills.set_defaults(group_parser=p_skills)
-
-    _add_skills_args(skills_sub.add_parser(
-        "install",
-        help="Install skills into ~/.claude/skills/ and ~/.agents/skills/",
-    ), "install")
-    _add_skills_args(skills_sub.add_parser(
-        "update",
-        help="Refresh bundled skills and selected GPTomics groups",
-    ), "update")
-
-    skills_sub.add_parser(
-        "status",
-        help="Show dotfiles-managed and GPTomics skills for Claude Code and Codex",
     )
 
     # ── project memory ──────────────────────────────────────────────────────
@@ -238,15 +185,13 @@ def _build_parser() -> argparse.ArgumentParser:
 # deferring them keeps CLI startup fast.
 
 def _cmd_install(args: argparse.Namespace) -> int:
-    from pathlib import Path
     from .install import run_install
-    ok = run_install(
+    return run_install(
         profile=args.profile,
         dry_run=args.dry_run,
-        home=Path(args.home) if args.home else None,
         quiet=args.quiet,
+        refresh=args.refresh,
     )
-    return 0 if ok else 1
 
 
 def _cmd_update(args: argparse.Namespace) -> int:
@@ -277,52 +222,6 @@ def _cmd_profiles(args: argparse.Namespace) -> None:
 def _cmd_agent_stats(args: argparse.Namespace) -> int:
     from .claude_stats import run_agent_stats
     return run_agent_stats()
-
-
-def _cmd_skills(args: argparse.Namespace):
-    from collections import Counter
-    from pathlib import Path
-    from . import RESOURCES_DIR
-    from .agent_skills import run_skills_setup, check_skill_statuses
-
-    target_dir = Path.home() / ".claude" / "skills"
-    codex_target_dir = Path.home() / ".agents" / "skills"
-
-    if args.skills_command in {"install", "update"}:
-        groups = ["default"] + (args.extra_groups or [])
-        if "all" in groups and not args.allow_large:
-            args.group_parser.error("the 'all' group requires --allow-large")
-        statuses = run_skills_setup(
-            resources_dir=RESOURCES_DIR,
-            groups=groups,
-            cache_dir=Path.home() / ".local" / "share" / "dotfiles" / "bioskills",
-            target_dir=target_dir,
-            codex_target_dir=codex_target_dir,
-            dry_run=args.dry_run,
-            update=args.skills_command == "update",
-        )
-        failed = [s for s in statuses if not s.installed and not args.dry_run]
-        return 1 if failed else 0
-
-    if args.skills_command == "status":
-        found = False
-        for agent, agent_target in (
-            ("Claude Code", target_dir),
-            ("Codex", codex_target_dir),
-        ):
-            statuses = check_skill_statuses(agent_target)
-            if not statuses:
-                print(f"  – no managed {agent} skills installed in {agent_target}")
-                continue
-            found = True
-            print(f"  {len(statuses)} {agent} skill(s) found in {agent_target}")
-            for cat, count in sorted(Counter(s.category for s in statuses).items()):
-                print(f"    {cat:<30} {count}")
-        if not found:
-            print("    Run: dotfiles skills install")
-        return 0
-
-    return None
 
 
 def _cmd_memory(args: argparse.Namespace):
@@ -369,7 +268,6 @@ _HANDLERS = {
     "profiles": _cmd_profiles,
     "agent-stats": _cmd_agent_stats,
     "claude-stats": _cmd_agent_stats,
-    "skills": _cmd_skills,
     "memory": _cmd_memory,
     "claude": _cmd_claude,
 }
@@ -384,13 +282,22 @@ def main() -> None:
 
 
 def _list_profiles() -> None:
-    from . import RESOURCES_DIR
-    from .profiles import load_profiles
-    profiles = load_profiles(RESOURCES_DIR)
+    from . import chezmoi
+    descriptions = chezmoi.profiles()
+    if not descriptions:
+        print("Could not read profiles from chezmoi — is it initialised?")
+        print("Run: dotfiles install")
+        return
+    layers = chezmoi.data().get("layers", {})
+    active = chezmoi.active_profile()
     print("Available profiles:\n")
-    for name, p in sorted(profiles.items()):
-        inherits = f"  (inherits: {', '.join(p.inherits)})" if p.inherits else ""
-        print(f"  {name:<12} {p.description}{inherits}")
+    for name in sorted(descriptions):
+        marker = " *" if name == active else "  "
+        inherited = [layer for layer in layers.get(name, []) if layer != name]
+        inherits = f"  (inherits: {', '.join(inherited)})" if inherited else ""
+        print(f"{marker}{name:<12} {descriptions[name]}{inherits}")
+    if active:
+        print("\n* active profile")
 
 
 def _version() -> str:

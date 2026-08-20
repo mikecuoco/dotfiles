@@ -1,4 +1,0 @@
-interface:
-  display_name: "Scientific Plotting"
-  short_description: "Create clear publication-ready figures"
-  default_prompt: "Use $scientific-plotting to create or refine this scientific figure for its intended deliverable."

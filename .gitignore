@@ -10,6 +10,7 @@ build/
 
 # Test / coverage
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
@@ -33,3 +34,12 @@ package-lock.json
 
 # Local project memories
 .agents/memory/
+
+# Editor/agent runtime state that lands here when tools run with this cwd
+/.vim/
+/.claude/worktrees/
+/.claude/settings.local.json
+
+# Written by `git config --global` while $HOME pointed here; the managed
+# credential config now lives in ~/.gitconfig.profile instead.
+/.gitconfig
