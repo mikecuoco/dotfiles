@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mike-dotfiles"
-version = "0.2.0"
+version = "0.1.0"
 description = "Cross-platform dotfiles for macOS, Linux, HPC, Codespaces, and Code Ocean"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
 keywords = ["dotfiles", "shell", "configuration", "devtools"]
 authors = [
-    { name = "Michael S. Cuoco", email = "mcuoco12@gmail.com" },
+    { name = "Michael S. Cuoco", email = "mikecuoco@users.noreply.github.com" },
 ]
 dependencies = [
     "tomli>=2.0.1; python_version < '3.11'",

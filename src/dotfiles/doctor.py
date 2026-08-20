@@ -8,13 +8,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from . import RESOURCES_DIR, chezmoi
 from .auth import AuthStatus, all_statuses
 from .claude_plugins import PluginStatus, check_plugin_statuses, load_plugin_config
 from .agent_skills import SkillStatus, check_skill_statuses
-from .install import claude_skills_dir
+from .install import get_resources_dir, read_state
 from .platform import PlatformInfo, detect_platform
 from .project_memory import MemoryStatus, check_project_memory, find_repo_root
+from .profiles import compose_sources, group_links, load_profiles, resolve_links
 
 
 # Tools to check — split into required and optional
@@ -22,16 +22,6 @@ _REQUIRED_TOOLS = ("git", "python3")
 _OPTIONAL_TOOLS = (
     "uv", "gh", "aws", "claude", "codex", "delta", "fzf", "eza", "rg", "vim",
 )
-
-
-def _which(name: str) -> Optional[str]:
-    """Locate a tool on PATH.
-
-    Indirection on purpose: tests fake tool discovery here, and patching
-    ``shutil.which`` wholesale would also blind the chezmoi wrapper, which
-    needs to find its own binary.
-    """
-    return shutil.which(name)
 
 
 @dataclass
@@ -47,25 +37,6 @@ class FileStatus:
     rel_path: str
     installed: bool
     message: str
-
-    @classmethod
-    def from_chezmoi(cls, line: str) -> "FileStatus":
-        """Parse one ``chezmoi status`` line.
-
-        The format mirrors ``git status --short``: two status columns then the
-        path. Column two is what apply would do -- A(dd), M(odify), D(elete).
-        """
-        codes, _, path = line.partition(" ")
-        return cls(path.strip(), False, _STATUS_MESSAGES.get(
-            codes.strip()[-1:], f"would change ({codes.strip()})"
-        ))
-
-
-_STATUS_MESSAGES = {
-    "A": "missing -- would be created",
-    "M": "differs from the managed version",
-    "D": "no longer managed -- would be removed",
-}
 
 
 @dataclass
@@ -89,18 +60,19 @@ class DoctorReport:
 def run_doctor(as_json: bool = False) -> int:
     """Run all checks and print a status report.  Returns exit code."""
     home = Path.home()
-    resources = RESOURCES_DIR
+    resources = get_resources_dir()
     platform_info = detect_platform()
-    installed_profile = chezmoi.active_profile()
+    state = read_state(home)
 
     # Some deployed containers omit their platform's usual runtime variables.
     # A specialized profile saved by an explicit install is better evidence
     # than the generic Linux fallback in that case.
     if (
-        installed_profile
+        state
         and platform_info.platform == "linux"
-        and installed_profile in {"cluster", "codeocean", "codespace"}
+        and state.get("profile") in {"cluster", "codeocean", "codespace"}
     ):
+        installed_profile = state["profile"]
         platform_info = PlatformInfo(
             installed_profile,
             platform_info.os_name,
@@ -110,27 +82,34 @@ def run_doctor(as_json: bool = False) -> int:
 
     report = DoctorReport(
         platform=platform_info,
-        profile=installed_profile,
-        dotfiles_ok=installed_profile is not None,
+        profile=state["profile"] if state else None,
+        dotfiles_ok=state is not None,
     )
 
     # ── File checks ──────────────────────────────────────────────────────────
-    # chezmoi compares its target state against the destination directly, so
-    # there is no separate manifest to drift out of sync with reality.
-    if installed_profile:
-        try:
-            report.file_statuses = [
-                FileStatus.from_chezmoi(line) for line in chezmoi.status()
-            ]
-        except chezmoi.ChezmoiError as exc:
-            report.file_statuses = [FileStatus("(chezmoi status)", False, str(exc))]
+    if state:
+        generated = set(state.get("generated", []))
+        merged = set(state.get("merged", []))
+        expected_generated = _expected_generated(resources, state["profile"])
+
+        report.file_statuses = [
+            _file_status(
+                dst_rel,
+                home / dst_rel,
+                resources / src_rel,
+                generated,
+                merged,
+                expected_generated,
+            )
+            for dst_rel, src_rel in state["links"].items()
+        ]
 
     # ── Tool checks ──────────────────────────────────────────────────────────
     for name in _REQUIRED_TOOLS:
-        path = _which(name)
+        path = shutil.which(name)
         report.tool_statuses.append(ToolStatus(name, bool(path), path, required=True))
     for name in _OPTIONAL_TOOLS:
-        path = _which(name)
+        path = shutil.which(name)
         report.tool_statuses.append(ToolStatus(name, bool(path), path, required=False))
 
     # ── Auth checks ──────────────────────────────────────────────────────────
@@ -149,7 +128,7 @@ def run_doctor(as_json: bool = False) -> int:
 
     # ── Agent skill checks ────────────────────────────────────────────────────
     # Non-fatal: warn if none are installed; not an error for exit-code purposes.
-    report.skill_statuses = check_skill_statuses(claude_skills_dir(home))
+    report.skill_statuses = check_skill_statuses(home / ".claude" / "skills")
     report.codex_skill_statuses = check_skill_statuses(home / ".agents" / "skills")
 
     # ── Shared project memory ────────────────────────────────────────────────
@@ -189,6 +168,64 @@ def run_doctor(as_json: bool = False) -> int:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+def _expected_generated(resources: Path, profile: str) -> dict[str, str]:
+    """Return the content each generated destination should currently hold.
+
+    Returns an empty mapping if the profile cannot be resolved or a source is
+    unreadable, in which case every generated file reports as differing.
+    """
+    try:
+        base, appends, _ = group_links(
+            resolve_links(profile, load_profiles(resources))
+        )
+        return {
+            dst_rel: compose_sources(
+                [resources / link.src for link in (base[dst_rel], *extra_links)]
+            )
+            for dst_rel, extra_links in appends.items()
+            if dst_rel in base
+        }
+    except (KeyError, OSError, ValueError):
+        return {}
+
+
+def _file_status(
+    dst_rel: str,
+    dst: Path,
+    src: Path,
+    generated: set[str],
+    merged: set[str],
+    expected_generated: dict[str, str],
+) -> FileStatus:
+    """Classify one installed destination against what the state file expects."""
+    if dst_rel in generated:
+        regular = dst.is_file() and not dst.is_symlink()
+        expected = expected_generated.get(dst_rel)
+        matches = regular and expected is not None and dst.read_text() == expected
+        if matches:
+            return FileStatus(dst_rel, True, "generated")
+        return FileStatus(
+            dst_rel, False, "generated content differs" if regular else "missing"
+        )
+
+    if dst_rel in merged:
+        regular = dst.is_file() and not dst.is_symlink()
+        return FileStatus(dst_rel, regular, "merged" if regular else "missing")
+
+    if dst.is_symlink():
+        try:
+            if dst.resolve() == src.resolve():
+                return FileStatus(dst_rel, True, "ok")
+        except OSError:
+            pass
+        return FileStatus(dst_rel, False, "symlink points elsewhere")
+
+    if dst.exists():
+        return FileStatus(dst_rel, False, "exists but not a dotfiles symlink")
+
+    return FileStatus(dst_rel, False, "missing")
+
+
 def _default_plugin_names(resources: Path) -> set[str]:
     """Return the integration names in the ``default`` plugin group.
 
@@ -220,13 +257,13 @@ def _emit_human(report: DoctorReport) -> None:
         print(fail("Not installed — run: dotfiles install"))
     else:
         print(ok(f"Profile: {report.profile}"))
-        # chezmoi reports discrepancies only; an empty list means everything
-        # in the target state matches the destination.
-        if not report.file_statuses:
-            print(ok("All managed files are up to date"))
+        broken = [f for f in report.file_statuses if not f.installed]
+        good   = [f for f in report.file_statuses if f.installed]
+        if not broken:
+            print(ok(f"All {len(good)} files installed correctly"))
         else:
-            print(fail(f"{len(report.file_statuses)} file(s) out of date"))
-            for fs in report.file_statuses:
+            print(ok(f"{len(good)} files ok"))
+            for fs in broken:
                 print(fail(f"{fs.rel_path}: {fs.message}"))
 
     print("\nTools")
@@ -322,7 +359,7 @@ def _emit_json(report: DoctorReport) -> None:
         "auth": [asdict(a) for a in report.auth_statuses],
         "claude_plugins": [asdict(p) for p in report.claude_plugin_statuses],
         "bio_plugins": [asdict(p) for p in report.bio_plugin_statuses],
-        "skills": [asdict(s) for s in report.skill_statuses],
+        "bioskills": [asdict(s) for s in report.skill_statuses],
         "codex_skills": [asdict(s) for s in report.codex_skill_statuses],
         "project_memory": {
             "root": report.project_memory_root,

@@ -13,7 +13,7 @@ def test_update_dry_run_shows_both_steps(monkeypatch, capsys):
 
     output = capsys.readouterr().out
     assert "uv tool upgrade mike-dotfiles" in output
-    assert "-m dotfiles install --refresh --profile linux --quiet --dry-run" in output
+    assert "-m dotfiles install --profile linux --quiet --dry-run" in output
 
 
 def test_update_stops_when_upgrade_fails(monkeypatch, capsys):
@@ -50,10 +50,7 @@ def test_update_runs_fresh_install_after_upgrade(monkeypatch):
     assert update.run_update(profile="codespace", quiet=True) == 0
     assert calls == [
         ["update-command"],
-        [
-            update.sys.executable, "-m", "dotfiles", "install", "--refresh",
-            "--profile", "codespace", "--quiet",
-        ],
+        [update.sys.executable, "-m", "dotfiles", "install", "--profile", "codespace", "--quiet"],
     ]
 
 

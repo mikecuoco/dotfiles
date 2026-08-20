@@ -1,10 +1,4 @@
-"""Tests for the doctor command.
-
-File health now comes from `chezmoi status` rather than a manifest the
-installer wrote, so these tests drive the real binary against a throwaway
-$HOME. HOME is set in the environment rather than patching ``Path.home``:
-chezmoi runs as a subprocess and only the environment reaches it.
-"""
+"""Tests for the doctor command."""
 from __future__ import annotations
 
 import json
@@ -14,11 +8,15 @@ from unittest.mock import patch
 
 import pytest
 
+from dotfiles.install import run_install
 from dotfiles.doctor import run_doctor
 
-from .conftest import apply_chezmoi, requires_chezmoi
 
-pytestmark = requires_chezmoi
+@pytest.fixture()
+def installed_home(tmp_path):
+    """A fake $HOME with dotfiles installed."""
+    run_install(profile="codespace", dry_run=False, home=tmp_path)
+    return tmp_path
 
 
 @pytest.fixture(autouse=True)
@@ -27,40 +25,36 @@ def isolate_plugin_checks(monkeypatch):
     monkeypatch.setattr("dotfiles.doctor.check_plugin_statuses", lambda resources: [])
 
 
-@pytest.fixture()
-def codeocean_home(tmp_path, monkeypatch):
-    result = apply_chezmoi(tmp_path, "codeocean")
-    assert result.returncode == 0, result.stderr
-    monkeypatch.setenv("HOME", str(tmp_path))
-    return tmp_path
-
-
-def _minimal_env(home: Path) -> dict:
-    """Just enough environment to run chezmoi, with no platform signals set."""
-    return {"HOME": str(home), "PATH": os.environ["PATH"]}
-
-
-def test_doctor_reports_all_sections(installed_home, monkeypatch, capsys):
-    monkeypatch.setenv("HOME", str(installed_home))
-    run_doctor()
+def test_doctor_exits_zero_after_install(installed_home, capsys):
+    with patch("dotfiles.doctor.Path.home", return_value=installed_home):
+        code = run_doctor()
+    # The doctor may return 1 if optional auth is missing, but files/tools
+    # should be fine in CI; just test it runs without exception.
     captured = capsys.readouterr()
-    for section in ("Platform", "Dotfiles", "Tools", "Authentication"):
-        assert section in captured.out
+    assert "Platform" in captured.out
+    assert "Dotfiles" in captured.out
+    assert "Tools" in captured.out
+    assert "Authentication" in captured.out
 
 
-def test_doctor_exits_nonzero_when_not_installed(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    code = run_doctor()
+def test_doctor_exits_nonzero_when_not_installed(tmp_path, capsys):
+    with patch("dotfiles.doctor.Path.home", return_value=tmp_path):
+        code = run_doctor()
     assert code == 1
-    assert "Not installed" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "Not installed" in captured.out
 
 
-def test_doctor_json_mode(installed_home, monkeypatch, capsys):
-    monkeypatch.setenv("HOME", str(installed_home))
-    run_doctor(as_json=True)
-    data = json.loads(capsys.readouterr().out)
-    for key in ("platform", "dotfiles", "tools", "auth", "project_memory"):
-        assert key in data
+def test_doctor_json_mode(installed_home, capsys):
+    with patch("dotfiles.doctor.Path.home", return_value=installed_home):
+        run_doctor(as_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert "platform" in data
+    assert "dotfiles" in data
+    assert "tools" in data
+    assert "auth" in data
+    assert "project_memory" in data
 
 
 def test_doctor_no_secrets_in_output(installed_home, capsys):
@@ -76,9 +70,9 @@ def test_doctor_no_secrets_in_output(installed_home, capsys):
         "AWS_SECRET_ACCESS_KEY": "aws-secret-key-do-not-leak",
         "AWS_SESSION_TOKEN": "aws-session-token-do-not-leak",
     }
-    env = {**fake_secrets, "HOME": str(installed_home)}
-    with patch.dict(os.environ, env, clear=False), \
-         patch("dotfiles.doctor._which", return_value=None):
+    with patch.dict(os.environ, fake_secrets, clear=False), \
+         patch("dotfiles.doctor.Path.home", return_value=installed_home), \
+         patch("dotfiles.doctor.shutil.which", return_value=None):
         run_doctor()
 
     captured = capsys.readouterr()
@@ -87,59 +81,50 @@ def test_doctor_no_secrets_in_output(installed_home, capsys):
         assert secret not in all_output, f"Secret appeared in doctor output: {secret}"
 
 
-def test_clean_install_reports_no_discrepancies(codeocean_home, capsys):
-    """A freshly applied profile has nothing out of date."""
-    with patch("dotfiles.doctor.all_statuses", return_value=[]), \
-         patch("dotfiles.doctor._which", return_value="/usr/bin/tool"):
-        code = run_doctor(as_json=True)
+def test_doctor_detects_broken_symlink(installed_home, capsys):
+    """If a symlink is removed, doctor should report it as broken."""
+    bashrc = installed_home / ".bashrc"
+    bashrc.unlink()
 
-    report = json.loads(capsys.readouterr().out)
-    assert report["dotfiles"]["files"] == []
-    assert report["dotfiles"]["profile"] == "codeocean"
-    assert code == 0
+    with patch("dotfiles.doctor.Path.home", return_value=installed_home):
+        code = run_doctor()
 
-
-def test_doctor_detects_removed_symlink(installed_home, monkeypatch, capsys):
-    """Deleting a managed file shows up as something apply would restore."""
-    monkeypatch.setenv("HOME", str(installed_home))
-    (installed_home / ".bashrc").unlink()
-
-    with patch("dotfiles.doctor.all_statuses", return_value=[]), \
-         patch("dotfiles.doctor._which", return_value="/usr/bin/tool"):
-        code = run_doctor(as_json=True)
-
-    report = json.loads(capsys.readouterr().out)
-    paths = {item["path"] for item in report["dotfiles"]["files"]}
     assert code == 1
-    assert ".bashrc" in paths
+    captured = capsys.readouterr()
+    assert "missing" in captured.out or "✗" in captured.out
 
 
-def test_doctor_detects_modified_generated_instructions(
-    installed_home, monkeypatch, capsys
-):
-    """Hand-editing a generated file is reported, not silently accepted."""
-    monkeypatch.setenv("HOME", str(installed_home))
-    (installed_home / ".codex" / "AGENTS.md").write_text("stale\n")
+def test_doctor_accepts_generated_and_merged_codeocean_files(tmp_path, capsys):
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    capsys.readouterr()
 
-    with patch("dotfiles.doctor.all_statuses", return_value=[]), \
-         patch("dotfiles.doctor._which", return_value="/usr/bin/tool"):
-        code = run_doctor(as_json=True)
-
-    report = json.loads(capsys.readouterr().out)
-    entries = {item["path"]: item for item in report["dotfiles"]["files"]}
-    assert code == 1
-    assert ".codex/AGENTS.md" in entries
-    assert entries[".codex/AGENTS.md"]["ok"] is False
-
-
-def test_doctor_recognizes_documented_codeocean_runtime_signal(
-    codeocean_home, capsys
-):
-    env = {**_minimal_env(codeocean_home), "CO_CAPSULE_ID": "capsule-id"}
-    with patch.dict(os.environ, env, clear=True), \
+    with patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
          patch("dotfiles.doctor.all_statuses", return_value=[]), \
          patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
-         patch("dotfiles.doctor._which", return_value="/usr/bin/tool"):
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
+        run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    files = {item["path"]: item for item in report["dotfiles"]["files"]}
+    assert files[".claude/CLAUDE.md"]["ok"] is True
+    assert files[".claude/CLAUDE.md"]["message"] == "generated"
+    assert files[".codex/AGENTS.md"]["ok"] is True
+    assert files[".codex/AGENTS.md"]["message"] == "generated"
+    assert files[".codex/config.toml"]["ok"] is True
+    assert files[".codex/config.toml"]["message"] == "merged"
+    assert files[".claude.json"]["ok"] is True
+    assert files[".claude.json"]["message"] == "merged"
+
+
+def test_doctor_recognizes_documented_codeocean_runtime_signal(tmp_path, capsys):
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    capsys.readouterr()
+
+    with patch.dict(os.environ, {"CO_CAPSULE_ID": "capsule-id"}, clear=True), \
+         patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
         code = run_doctor(as_json=True)
 
     report = json.loads(capsys.readouterr().out)
@@ -149,13 +134,16 @@ def test_doctor_recognizes_documented_codeocean_runtime_signal(
 
 
 def test_doctor_uses_installed_codeocean_profile_without_runtime_signal(
-    codeocean_home, capsys
+    tmp_path, capsys
 ):
-    """With no runtime signal, the chezmoi-configured profile is the evidence."""
-    with patch.dict(os.environ, _minimal_env(codeocean_home), clear=True), \
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    capsys.readouterr()
+
+    with patch.dict(os.environ, {}, clear=True), \
+         patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
          patch("dotfiles.doctor.all_statuses", return_value=[]), \
          patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
-         patch("dotfiles.doctor._which", return_value="/usr/bin/tool"), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"), \
          patch("dotfiles.platform.platform.system", return_value="Linux"), \
          patch("dotfiles.platform.socket.gethostname", return_value="afff5427898f"):
         code = run_doctor(as_json=True)
@@ -170,18 +158,39 @@ def test_doctor_uses_installed_codeocean_profile_without_runtime_signal(
     }
 
 
+def test_doctor_detects_modified_generated_instructions(tmp_path, capsys):
+    run_install(profile="codespace", dry_run=False, home=tmp_path)
+    (tmp_path / ".codex" / "AGENTS.md").write_text("stale\n")
+    capsys.readouterr()
+
+    with patch("dotfiles.doctor.Path.home", return_value=tmp_path), \
+         patch("dotfiles.doctor.all_statuses", return_value=[]), \
+         patch("dotfiles.doctor.check_plugin_statuses", return_value=[]), \
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
+        code = run_doctor(as_json=True)
+
+    report = json.loads(capsys.readouterr().out)
+    files = {item["path"]: item for item in report["dotfiles"]["files"]}
+    assert code == 1
+    assert files[".codex/AGENTS.md"] == {
+        "path": ".codex/AGENTS.md",
+        "ok": False,
+        "message": "generated content differs",
+    }
+
+
 def test_doctor_fails_for_unignored_project_memory(
     installed_home, tmp_path, monkeypatch, capsys
 ):
-    monkeypatch.setenv("HOME", str(installed_home))
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     (repo / ".agents" / "memory").mkdir(parents=True)
     monkeypatch.setattr("dotfiles.project_memory._is_git_ignored", lambda *args: False)
 
-    with patch("dotfiles.doctor.Path.cwd", return_value=repo), \
+    with patch("dotfiles.doctor.Path.home", return_value=installed_home), \
+         patch("dotfiles.doctor.Path.cwd", return_value=repo), \
          patch("dotfiles.doctor.all_statuses", return_value=[]), \
-         patch("dotfiles.doctor._which", return_value="/usr/bin/tool"):
+         patch("dotfiles.doctor.shutil.which", return_value="/usr/bin/tool"):
         code = run_doctor(as_json=True)
 
     report = json.loads(capsys.readouterr().out)

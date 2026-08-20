@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import chezmoi
+from .profiles import compose_sources, load_profiles, resolve_links
 
 # Budget thresholds (estimated tokens, warnings only — not hard failures)
 GLOBAL_BUDGET = 900
@@ -53,65 +53,56 @@ def _fmt_total(label: str, tokens: int, budget: Optional[int] = None) -> str:
     return f"{label}\n  estimated tokens:  {tokens}{tag}"
 
 
-#: Source template for each agent's instruction file, relative to the chezmoi
-#: source directory. Rendering these is exactly what `chezmoi apply` does, so
-#: the budget is measured against the bytes that actually get installed.
-_TEMPLATES = {
-    "Claude": "dot_claude/CLAUDE.md.tmpl",
-    "Codex": "dot_codex/AGENTS.md.tmpl",
-}
+def _instruction_sources(
+    resources: Path,
+    profile_name: str,
+    destination: str,
+) -> list[Path]:
+    profiles = load_profiles(resources)
+    return [
+        resources / link.src
+        for link in resolve_links(profile_name, profiles)
+        if link.dst == destination and link.mode in {"link", "append"}
+    ]
 
 
-def _render(source: Path, agent: str, profile_name: str) -> str:
-    """Render one agent's instruction file for *profile_name*."""
-    return chezmoi.execute_template(source / _TEMPLATES[agent], profile=profile_name)
-
-
-def run_agent_stats(source_dir: Optional[Path] = None) -> int:
+def run_agent_stats(resources_dir: Optional[Path] = None) -> int:
     """Print agent context budgets. Returns 0 when every layer is in budget."""
-    try:
-        source = source_dir or chezmoi.source_dir()
-    except chezmoi.ChezmoiError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    if source is None or not source.is_dir():
-        print(
-            "Error: could not locate the chezmoi source directory.\n"
-            "Run: dotfiles install",
-            file=sys.stderr,
-        )
-        return 1
+    from . import RESOURCES_DIR
 
-    profile_names = sorted(chezmoi.data().get("layers", {}))
-    if not profile_names:
-        print("Error: no profiles found in the chezmoi source", file=sys.stderr)
-        return 1
+    resources = resources_dir or RESOURCES_DIR
+    profiles = load_profiles(resources)
+    destinations = {
+        "Claude": ".claude/CLAUDE.md",
+        "Codex": ".codex/AGENTS.md",
+    }
 
     print("Agent context budget")
     over_budget = False
-    for agent_name in _TEMPLATES:
-        try:
-            global_text = _render(source, agent_name, "common")
-        except chezmoi.ChezmoiError as exc:
-            print(f"Error: could not render {agent_name} instructions: {exc}",
-                  file=sys.stderr)
+    for agent_name, destination in destinations.items():
+        common_sources = _instruction_sources(resources, "common", destination)
+        missing = [path for path in common_sources if not path.exists()]
+        if not common_sources or missing:
+            detail = missing[0] if missing else destination
+            print(f"Error: instruction source not found for {detail}", file=sys.stderr)
             return 1
 
+        global_text = compose_sources(common_sources)
         global_stats = _measure(global_text)
         print()
         print(_fmt(f"{agent_name} global", global_stats, budget=GLOBAL_BUDGET))
         over_budget = over_budget or global_stats["tokens"] > GLOBAL_BUDGET
 
-        for profile_name in profile_names:
+        for profile_name in sorted(profiles):
             if profile_name == "common":
                 continue
-            effective_text = _render(source, agent_name, profile_name)
-            # The overlay is whatever the profile adds on top of the shared
-            # base; comparing rendered output avoids re-deriving the layering.
-            if effective_text == global_text:
+            sources = _instruction_sources(resources, profile_name, destination)
+            overlay_sources = sources[len(common_sources):]
+            if not overlay_sources:
                 continue
-            overlay_text = effective_text[len(global_text):]
+            overlay_text = compose_sources(overlay_sources)
             overlay_stats = _measure(overlay_text)
+            effective_tokens = estimate_tokens(compose_sources(sources))
 
             print()
             print(_fmt(
@@ -122,13 +113,13 @@ def run_agent_stats(source_dir: Optional[Path] = None) -> int:
             print()
             print(_fmt_total(
                 f"{agent_name} {profile_name} effective total",
-                estimate_tokens(effective_text),
+                effective_tokens,
             ))
             over_budget = over_budget or overlay_stats["tokens"] > OVERLAY_BUDGET
 
     return 1 if over_budget else 0
 
 
-def run_claude_stats(source_dir: Optional[Path] = None) -> int:
+def run_claude_stats(resources_dir: Optional[Path] = None) -> int:
     """Compatibility alias for the former Claude-only reporter."""
-    return run_agent_stats(source_dir=source_dir)
+    return run_agent_stats(resources_dir=resources_dir)

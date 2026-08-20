@@ -30,7 +30,7 @@ def test_install_quiet_flag(monkeypatch, extra_args, expected_quiet):
 
     def fake_run_install(**kwargs):
         received.update(kwargs)
-        return 0
+        return True
 
     monkeypatch.setattr(install, "run_install", fake_run_install)
     monkeypatch.setattr(

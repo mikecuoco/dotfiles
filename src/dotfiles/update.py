@@ -17,21 +17,18 @@ def run_update(
     dry_run: bool = False,
     quiet: bool = False,
 ) -> int:
-    """Upgrade the dotfiles package, then refresh and apply the dotfiles.
+    """Upgrade dotfiles, then install the freshly downloaded resources.
 
-    Two separate things are updated: the ``dotfiles`` CLI (a uv tool or pip
-    install) and the chezmoi source repository that holds the dotfiles
-    themselves. Re-running the install in a new Python process is important:
-    it ensures the code comes from the version that was just downloaded.
+    The package can be installed either as a uv tool (the recommended path) or
+    through pip.  Re-running the install in a new Python process is important:
+    it ensures the resources come from the version that was just downloaded.
     """
     try:
         upgrade_cmd = _upgrade_command()
     except RuntimeError as exc:
         print(f"Error: could not update dotfiles: {exc}", file=sys.stderr)
         return 1
-    # --refresh pulls the chezmoi source repository before applying, so the
-    # dotfiles themselves refresh alongside the package.
-    install_cmd = [sys.executable, "-m", "dotfiles", "install", "--refresh"]
+    install_cmd = [sys.executable, "-m", "dotfiles", "install"]
     if profile:
         install_cmd.extend(["--profile", profile])
     if quiet:

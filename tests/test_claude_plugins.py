@@ -20,9 +20,9 @@ from dotfiles.claude_plugins import (
     load_plugin_config,
     run_claude_setup,
 )
-from dotfiles import RESOURCES_DIR
+from dotfiles.install import get_resources_dir
 
-RESOURCES = RESOURCES_DIR
+RESOURCES = get_resources_dir()
 
 # ── Config loading ────────────────────────────────────────────────────────────
 

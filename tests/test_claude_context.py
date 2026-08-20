@@ -18,31 +18,18 @@ from dotfiles import RESOURCES_DIR
 from dotfiles._toml import tomllib
 from dotfiles.claude_stats import estimate_tokens, GLOBAL_BUDGET, OVERLAY_BUDGET
 
-from .conftest import (
-    REPO_ROOT,
-    apply_chezmoi,
-    chezmoi_status,
-    render,
-    requires_chezmoi,
-)
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-# Instruction fragments are chezmoi templates, composed into ~/.claude/CLAUDE.md
-# and ~/.codex/AGENTS.md at apply time. They live under .chezmoitemplates/
-# precisely so chezmoi never installs them as targets of their own.
-SOURCE = REPO_ROOT / "home"
-TEMPLATES = SOURCE / ".chezmoitemplates"
-
-SHARED_MD = TEMPLATES / "agents-preferences.md"
-CLAUDE_MD = TEMPLATES / "claude-instructions.md"
-CODEX_MD = TEMPLATES / "codex-instructions.md"
-CODEX_SETTINGS = TEMPLATES / "codex-preferences.toml"
-CODEOCEAN_MD = TEMPLATES / "codeocean-preferences.md"
-GLOBAL_GITIGNORE = SOURCE / "dot_gitignore"
-CODEOCEAN_EXPORTS = SOURCE / "dot_exports.codeocean"
-CLAUDE_SETTINGS = SOURCE / "dot_claude" / "settings.json"
-CODEOCEAN_GLOBAL = SOURCE / "modify_private_dot_claude.json"
+SHARED_MD = RESOURCES_DIR / "common" / "agents" / "PREFERENCES.md"
+CLAUDE_MD = RESOURCES_DIR / "common" / "claude" / "CLAUDE.md"
+CODEX_MD = RESOURCES_DIR / "common" / "codex" / "AGENTS.md"
+CODEX_SETTINGS = RESOURCES_DIR / "common" / "codex" / "preferences.toml"
+GLOBAL_GITIGNORE = RESOURCES_DIR / "common" / "git" / ".gitignore"
+CODEOCEAN_MD = RESOURCES_DIR / "codeocean" / "agents" / "PREFERENCES.md"
+CODEOCEAN_EXPORTS = RESOURCES_DIR / "codeocean" / "shell" / ".exports.codeocean"
+CLAUDE_SETTINGS = RESOURCES_DIR / "common" / "claude" / "settings.json"
+CODEOCEAN_GLOBAL = RESOURCES_DIR / "codeocean" / "claude" / "global.json"
+REPO_ROOT = RESOURCES_DIR.parents[2]
 
 
 def _global_text() -> str:
@@ -170,26 +157,8 @@ def test_shared_codex_settings_define_secret_safe_workspace_profile():
     assert filesystem["/Users/*/.codex/auth.json"] == "deny"
 
 
-@requires_chezmoi
-def test_codeocean_global_defaults_only_skip_onboarding(tmp_path):
-    """~/.claude.json gains exactly one managed key and nothing else."""
-    result = apply_chezmoi(tmp_path, "codeocean")
-    assert result.returncode == 0, result.stderr
-    assert json.loads((tmp_path / ".claude.json").read_text()) == {
-        "hasCompletedOnboarding": True,
-    }
-
-
-@requires_chezmoi
-def test_codeocean_global_merge_preserves_app_state(tmp_path):
-    """The managed key is merged into app-written state, not written over it."""
-    (tmp_path / ".claude.json").write_text(
-        json.dumps({"userID": "abc123", "hasCompletedOnboarding": False})
-    )
-    result = apply_chezmoi(tmp_path, "codeocean")
-    assert result.returncode == 0, result.stderr
-    assert json.loads((tmp_path / ".claude.json").read_text()) == {
-        "userID": "abc123",
+def test_codeocean_global_defaults_only_skip_onboarding():
+    assert json.loads(CODEOCEAN_GLOBAL.read_text()) == {
         "hasCompletedOnboarding": True,
     }
 
@@ -223,7 +192,7 @@ def test_shared_project_memory_uses_singular_agent_directory():
         assert obsolete not in GLOBAL_GITIGNORE.read_text()
     assert "memories = true" not in CODEX_SETTINGS.read_text()
     assert not (
-        RESOURCES_DIR / "agents" / "skills" / "session-handoff"
+        RESOURCES_DIR / "common" / "agents" / "skills" / "session-handoff"
     ).exists()
 
 
@@ -242,52 +211,25 @@ def test_no_codeocean_text_in_global():
 
 # ── composition test ──────────────────────────────────────────────────────────
 
-@requires_chezmoi
-@pytest.mark.parametrize(
-    ("template", "agent_heading"),
-    [
-        ("dot_claude/CLAUDE.md.tmpl", "Claude delegation"),
-        ("dot_codex/AGENTS.md.tmpl", "Codex delegation"),
-    ],
-)
-def test_codeocean_effective_context_contains_shared_and_specific_layers(
-    template, agent_heading
-):
+def test_codeocean_effective_context_contains_shared_and_specific_layers(tmp_path):
     """Both agents receive shared, agent-specific, and Code Ocean guidance."""
-    content = render(template, "codeocean")
-    assert "Working style" in content
-    assert agent_heading in content
-    assert "Code Ocean" in content
-    assert "/scratch" in content
+    from dotfiles.install import run_install
 
+    ok = run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    assert ok is True
 
-@requires_chezmoi
-@pytest.mark.parametrize(
-    "template", ["dot_claude/CLAUDE.md.tmpl", "dot_codex/AGENTS.md.tmpl"]
-)
-def test_non_overlay_profile_omits_codeocean_layer(template):
-    """A profile without the codeocean layer gets only the shared base."""
-    content = render(template, "linux")
-    assert "Working style" in content
-    assert "Code Ocean" not in content
-
-
-@requires_chezmoi
-@pytest.mark.parametrize(
-    "target", [".claude/CLAUDE.md", ".codex/AGENTS.md"]
-)
-def test_agent_instructions_are_generated_files_and_idempotent(tmp_path, target):
-    """Composed instructions are regular files, and re-applying does not churn."""
-    assert apply_chezmoi(tmp_path, "codeocean").returncode == 0
-    generated = tmp_path / target
-    assert generated.is_file() and not generated.is_symlink()
-    first = generated.read_text()
-    first_mtime = generated.stat().st_mtime_ns
-
-    assert apply_chezmoi(tmp_path, "codeocean").returncode == 0
-    assert generated.read_text() == first
-    assert generated.stat().st_mtime_ns == first_mtime
-    assert chezmoi_status(tmp_path) == ""
+    expected = {
+        tmp_path / ".claude" / "CLAUDE.md": "Claude delegation",
+        tmp_path / ".codex" / "AGENTS.md": "Codex delegation",
+    }
+    for generated, agent_heading in expected.items():
+        assert generated.exists()
+        assert not generated.is_symlink()
+        content = generated.read_text()
+        assert "Working style" in content
+        assert agent_heading in content
+        assert "Code Ocean" in content
+        assert "/scratch" in content
 
 
 # ── determinism test ─────────────────────────────────────────────────────────
@@ -325,6 +267,34 @@ def test_estimate_tokens_no_external_calls(monkeypatch):
 
 
 # ── idempotency test ─────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("relative", [".claude/CLAUDE.md", ".codex/AGENTS.md"])
+def test_codeocean_agent_instructions_idempotent(tmp_path, relative):
+    """Re-installing Code Ocean does not rewrite generated instructions."""
+    from dotfiles.install import run_install
+
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    generated = tmp_path / relative
+    first = generated.read_text()
+    first_mtime = generated.stat().st_mtime_ns
+
+    run_install(profile="codeocean", dry_run=False, home=tmp_path)
+    second = generated.read_text()
+
+    assert first == second
+    assert generated.stat().st_mtime_ns == first_mtime
+
+
+def test_non_overlay_profile_generates_both_agent_instruction_files(tmp_path):
+    """Common agent-specific supplements are composed for both tools."""
+    from dotfiles.install import run_install
+
+    run_install(profile="linux", dry_run=False, home=tmp_path)
+    for relative in (".claude/CLAUDE.md", ".codex/AGENTS.md"):
+        generated = tmp_path / relative
+        assert generated.exists()
+        assert not generated.is_symlink()
+
 
 # ── agent-stats output test ──────────────────────────────────────────────────
 
