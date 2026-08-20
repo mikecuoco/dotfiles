@@ -13,16 +13,6 @@ def _add_dry_run(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_skills_args(parser: argparse.ArgumentParser, verb: str) -> None:
-    """Add the flags shared by ``skills install`` and ``skills update``.
-
-    Which categories to install is configuration, not a flag: see
-    ``resources/agents/skills.toml``. As a flag it could only ever add skills,
-    never remove them, so narrowing the selection had no effect.
-    """
-    _add_dry_run(parser)
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dotfiles",
@@ -118,34 +108,6 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "claude-stats",
         help="Alias for agent-stats",
-    )
-
-    # ── skills ───────────────────────────────────────────────────────────────
-    p_skills = sub.add_parser(
-        "skills",
-        help="Manage GPTomics bioSkills for Claude Code and Codex",
-    )
-    skills_sub = p_skills.add_subparsers(
-        dest="skills_command",
-        metavar="SUBCOMMAND",
-    )
-    skills_sub.required = True
-    # Let the skills handler raise usage errors against this subparser, so the
-    # printed "usage:" line stays scoped to `dotfiles skills`.
-    p_skills.set_defaults(group_parser=p_skills)
-
-    _add_skills_args(skills_sub.add_parser(
-        "install",
-        help="Install GPTomics bioSkills into the managed skills directory",
-    ), "install")
-    _add_skills_args(skills_sub.add_parser(
-        "update",
-        help="Re-pull the GPTomics repository and refresh installed skills",
-    ), "update")
-
-    skills_sub.add_parser(
-        "status",
-        help="Show dotfiles-managed and GPTomics skills for Claude Code and Codex",
     )
 
     # ── project memory ──────────────────────────────────────────────────────
@@ -262,50 +224,6 @@ def _cmd_agent_stats(args: argparse.Namespace) -> int:
     return run_agent_stats()
 
 
-def _cmd_skills(args: argparse.Namespace):
-    from collections import Counter
-    from pathlib import Path
-    from . import RESOURCES_DIR
-    from .agent_skills import run_skills_setup, check_skill_statuses
-    from .install import claude_skills_dir
-
-    # Capsule-aware, matching where `dotfiles install` puts them.
-    # ~/.agents/skills is a chezmoi-managed symlink to the Claude directory,
-    # so both agents are served by writing once.
-    target_dir = claude_skills_dir()
-    codex_target_dir = Path.home() / ".agents" / "skills"
-
-    if args.skills_command in {"install", "update"}:
-        statuses = run_skills_setup(
-            resources_dir=RESOURCES_DIR,
-            target_dir=target_dir,
-            dry_run=args.dry_run,
-            update=args.skills_command == "update",
-        )
-        failed = [s for s in statuses if not s.installed and not args.dry_run]
-        return 1 if failed else 0
-
-    if args.skills_command == "status":
-        found = False
-        for agent, agent_target in (
-            ("Claude Code", target_dir),
-            ("Codex", codex_target_dir),
-        ):
-            statuses = check_skill_statuses(agent_target)
-            if not statuses:
-                print(f"  – no managed {agent} skills installed in {agent_target}")
-                continue
-            found = True
-            print(f"  {len(statuses)} {agent} skill(s) found in {agent_target}")
-            for cat, count in sorted(Counter(s.category for s in statuses).items()):
-                print(f"    {cat:<30} {count}")
-        if not found:
-            print("    Run: dotfiles skills install")
-        return 0
-
-    return None
-
-
 def _cmd_memory(args: argparse.Namespace):
     from pathlib import Path
     from .project_memory import (
@@ -350,7 +268,6 @@ _HANDLERS = {
     "profiles": _cmd_profiles,
     "agent-stats": _cmd_agent_stats,
     "claude-stats": _cmd_agent_stats,
-    "skills": _cmd_skills,
     "memory": _cmd_memory,
     "claude": _cmd_claude,
 }

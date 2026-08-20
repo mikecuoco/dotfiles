@@ -20,40 +20,18 @@ same tree. The two used to be independent copies kept in step by the installer;
 linking them removes the possibility of drift and means anything writing skills
 has one destination rather than two.
 
-## GPTomics bioSkills
+## Adding a skill
 
-```bash
-dotfiles skills install [--dry-run]
-dotfiles skills update [--dry-run]
-dotfiles skills status
-```
+Create a directory under `home/dot_claude/skills/` and re-run `dotfiles
+install`. `dotfiles doctor` reports every installed skill and flags any whose
+`SKILL.md` fails to parse or whose metadata `name` does not match its directory
+— a mismatch stops the agent loading it.
 
-These are fetched from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills)
-and cached in `~/.local/share/dotfiles/bioskills`. `install` clones on first run
-and reuses the cache afterwards; `update` pulls before refreshing.
-
-**Which skills get installed is configuration, not a flag.** The `categories`
-list in `src/dotfiles/resources/agents/skills.toml` selects them, and an empty
-list — the default — installs all 562. Editing that list is acted on: `install`
-prunes anything under the `bio-` namespace that is no longer selected. As a
-command-line flag this could only ever add skills, never remove them, which is
-why `--with` and `--allow-large` are gone.
-
-Note the cost of the full catalogue: agents load every installed skill's name
-and description to decide what to invoke, which is roughly **71,000 estimated
-tokens** across all 562. Narrow `categories` if that proves too heavy.
-
-Skills install as whole directories, so a skill's `usage-guide.md`, `examples/`
-and `scripts/` come with it. Upstream already namespaces each skill with a
-`bio-` prefix, and that declared name is used verbatim as the install directory
-name — nothing rewrites the frontmatter.
-
-Outside the Code Ocean capsule they are symlinks into the cache, so `update` is
-a `git pull`. Inside the capsule they are real copies: capsule contents are
-versioned and restored independently of `$HOME`, so a link into a cache there
-would dangle after a rebuild.
-
-`--dry-run` reports intended work without downloading or writing anything.
+> **Removed:** the GPTomics bioSkills integration (`dotfiles skills
+> install|update|status`) was dropped. Installing the full catalogue cost
+> roughly 71,000 estimated tokens of skill-discovery context across 562 skills,
+> which every session paid for. The implementation is in git history if it is
+> wanted again.
 
 ## Authoring rules
 

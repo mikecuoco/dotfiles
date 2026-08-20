@@ -22,10 +22,8 @@ def run_install(
 ) -> int:
     """Apply the active profile with chezmoi.
 
-    First-party agent skills are ordinary managed files under
-    ``home/dot_claude/skills/``, so they install with everything else.
-    GPTomics bioSkills are a separate, network-fetched concern: see
-    ``dotfiles skills install``.
+    Agent skills are ordinary managed files under ``home/dot_claude/skills/``,
+    so they install with everything else.
 
     With *refresh*, the chezmoi source repository is pulled first, so the
     dotfiles themselves update and not just the package. This is what

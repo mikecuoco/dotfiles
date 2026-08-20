@@ -322,7 +322,7 @@ def _emit_json(report: DoctorReport) -> None:
         "auth": [asdict(a) for a in report.auth_statuses],
         "claude_plugins": [asdict(p) for p in report.claude_plugin_statuses],
         "bio_plugins": [asdict(p) for p in report.bio_plugin_statuses],
-        "bioskills": [asdict(s) for s in report.skill_statuses],
+        "skills": [asdict(s) for s in report.skill_statuses],
         "codex_skills": [asdict(s) for s in report.codex_skill_statuses],
         "project_memory": {
             "root": report.project_memory_root,

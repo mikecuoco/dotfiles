@@ -1,9 +1,8 @@
 # Dotfiles repository
 
-- Dotfiles live under `home/` and are installed by chezmoi, including
-  first-party agent skills (`home/dot_claude/skills/`). `src/dotfiles/` is the
-  CLI that wraps chezmoi, plus the resources only the CLI reads (bioSkills and
-  Claude plugin config).
+- Dotfiles live under `home/` and are installed by chezmoi, including agent
+  skills (`home/dot_claude/skills/`). `src/dotfiles/` is the CLI that wraps
+  chezmoi, plus the Claude plugin config it reads.
 - Treat files under user home directories as installed output. Change the
   source under `home/` rather than editing installed copies.
 - Preserve app-managed Claude and Codex configuration outside the dotfiles
