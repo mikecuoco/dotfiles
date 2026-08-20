@@ -9,6 +9,7 @@ survives, and re-applying changes nothing.
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 
@@ -16,6 +17,7 @@ from dotfiles._toml import tomllib
 from .conftest import (
     INSTALLABLE_PROFILES,
     apply_chezmoi,
+    init_chezmoi,
     chezmoi_status,
     requires_chezmoi,
 )
@@ -130,6 +132,33 @@ def test_vim_tree_is_per_file_symlinks(applied):
     assert (vim / "colors" / "molokai.vim").is_symlink()
 
 
+BUNDLED_SKILLS = ("brisc", "code-ocean-capsule", "jupyter-workflow",
+                  "scientific-plotting")
+
+
+def test_bundled_skills_are_installed_by_apply(applied):
+    """First-party skills are ordinary managed files, not a Python side effect."""
+    _, home = applied
+    for name in BUNDLED_SKILLS:
+        assert (home / ".claude" / "skills" / name / "SKILL.md").is_file()
+
+
+def test_bundled_skills_keep_their_supporting_files(applied):
+    """A skill is a directory: references and scripts travel with it."""
+    _, home = applied
+    skill = home / ".claude" / "skills" / "code-ocean-capsule"
+    assert (skill / "scripts" / "check_capsule.py").is_file()
+    assert (skill / "references" / "datasets.md").is_file()
+
+
+def test_codex_skills_link_to_the_claude_directory(applied):
+    """One tree serves both agents, so the two cannot drift apart."""
+    _, home = applied
+    link = home / ".agents" / "skills"
+    assert link.is_symlink()
+    assert link.resolve() == (home / ".claude" / "skills").resolve()
+
+
 def test_apply_is_idempotent(applied):
     """A second apply must be a no-op."""
     profile, home = applied
@@ -217,3 +246,55 @@ def test_backup_does_not_copy_whole_directories(tmp_path):
 
     assert not list(tmp_path.glob(".config.dotfiles-backup.*"))
     assert (unrelated / "state.bin").read_bytes() == b"x" * 4096
+
+
+# ── Code Ocean capsule ───────────────────────────────────────────────────────
+
+def test_capsule_pass_writes_real_files_not_symlinks(tmp_path):
+    """Capsule contents are versioned and restored independently of the source.
+
+    A symlink into the chezmoi source would dangle after a capsule rebuild that
+    happens before the dotfiles are cloned back, so that pass renders its own
+    config with mode = "file".
+    """
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    capsule = tmp_path / "capsule"
+    home.mkdir()
+    capsule.mkdir()
+    init_chezmoi(home, "codeocean")
+
+    env = {**os.environ, "HOME": str(home), "DOTFILES_CAPSULE_DIR": str(capsule)}
+    result = subprocess.run(
+        [sys.executable, "-m", "dotfiles", "install", "--quiet"],
+        env=env, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+    settings = capsule / ".claude" / "settings.json"
+    assert settings.is_file() and not settings.is_symlink()
+    assert (capsule / ".claude" / "CLAUDE.md").is_file()
+    # ...while $HOME keeps the symlink form
+    assert (home / ".bashrc").is_symlink()
+
+
+def test_capsule_pass_keeps_claude_out_of_home(tmp_path):
+    """The two roots partition cleanly; nothing is written to both."""
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    capsule = tmp_path / "capsule"
+    home.mkdir()
+    capsule.mkdir()
+    init_chezmoi(home, "codeocean")
+
+    env = {**os.environ, "HOME": str(home), "DOTFILES_CAPSULE_DIR": str(capsule)}
+    subprocess.run(
+        [sys.executable, "-m", "dotfiles", "install", "--quiet"],
+        env=env, capture_output=True, text=True, check=False,
+    )
+    assert not (home / ".claude" / "CLAUDE.md").exists()
+    assert (home / ".agents" / "skills").is_symlink()

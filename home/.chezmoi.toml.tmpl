@@ -31,8 +31,13 @@
      - plain files       -> symlinked back into the source dir  (was: mode "link")
      - templates (.tmpl) -> regular generated files             (was: mode "append")
      - modify_ files     -> regular merged files                (was: mode "merge-*")
+
+   The Code Ocean capsule is the exception. Its contents are versioned with the
+   capsule and must survive a rebuild that happens before the dotfiles source is
+   cloned back, so symlinks into the source tree would dangle. That pass renders
+   its own config with mode = "file"; see chezmoi.py:_apply_capsule.
 */}}
-mode = "symlink"
+mode = {{ if eq (env "DOTFILES_CHEZMOI_SCOPE") "capsule" }}"file"{{ else }}"symlink"{{ end }}
 
 {{/*
    Persist the source directory chosen at init time. chezmoi's --source is a

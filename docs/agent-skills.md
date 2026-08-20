@@ -11,39 +11,53 @@ by Claude Code and Codex:
 └── scripts/               # optional deterministic helpers
 ```
 
-First-party skills are stored under
-`src/dotfiles/resources/agents/skills/`. A normal `dotfiles install`
-copies them to both personal discovery locations:
+First-party skills live in the chezmoi source at `home/dot_claude/skills/` and
+install like any other managed file — `chezmoi apply` (or `dotfiles install`)
+puts them in `~/.claude/skills/`.
 
-- Claude Code: `~/.claude/skills/`
-- Codex: `~/.agents/skills/`
+`~/.agents/skills` is a managed symlink to that directory, so Codex reads the
+same tree. The two used to be independent copies kept in step by the installer;
+linking them removes the possibility of drift and means anything writing skills
+has one destination rather than two.
 
-## Optional GPTomics skills
+## GPTomics bioSkills
 
 ```bash
-dotfiles skills install [--with GROUP]... [--dry-run]
-dotfiles skills update [--with GROUP]... [--dry-run]
+dotfiles skills install [--dry-run]
+dotfiles skills update [--dry-run]
 dotfiles skills status
 ```
 
-Both install and update include the default RNA-seq and single-cell group. Add
-`--with spatial` or `--with genomics` as needed. Downloaded source is cached in
-`~/.local/share/dotfiles/bioskills`; installed copies use the same directory
-layout for both agents and receive namespaced metadata names.
+These are fetched from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills)
+and cached in `~/.local/share/dotfiles/bioskills`. `install` clones on first run
+and reuses the cache afterwards; `update` pulls before refreshing.
 
-The `all` group contains 561 skills and can crowd each agent's discovery
-catalog. It therefore requires an explicit acknowledgement:
+**Which skills get installed is configuration, not a flag.** The `categories`
+list in `src/dotfiles/resources/agents/skills.toml` selects them, and an empty
+list — the default — installs all 562. Editing that list is acted on: `install`
+prunes anything under the `bio-` namespace that is no longer selected. As a
+command-line flag this could only ever add skills, never remove them, which is
+why `--with` and `--allow-large` are gone.
 
-```bash
-dotfiles skills install --with all --allow-large
-```
+Note the cost of the full catalogue: agents load every installed skill's name
+and description to decide what to invoke, which is roughly **71,000 estimated
+tokens** across all 562. Narrow `categories` if that proves too heavy.
 
-`--dry-run` reports intended work without copying or downloading anything.
-`skills status` validates installed metadata and reports both agent locations.
+Skills install as whole directories, so a skill's `usage-guide.md`, `examples/`
+and `scripts/` come with it. Upstream already namespaces each skill with a
+`bio-` prefix, and that declared name is used verbatim as the install directory
+name — nothing rewrites the frontmatter.
+
+Outside the Code Ocean capsule they are symlinks into the cache, so `update` is
+a `git pull`. Inside the capsule they are real copies: capsule contents are
+versioned and restored independently of `$HOME`, so a link into a cache there
+would dangle after a rebuild.
+
+`--dry-run` reports intended work without downloading or writing anything.
 
 ## Authoring rules
 
-- Put cross-agent skills under `resources/agents/skills/`.
+- Put cross-agent skills under `home/dot_claude/skills/`.
 - Use only portable `name` and `description` frontmatter in `SKILL.md`.
 - Put Codex-only UI metadata under `agents/openai.yaml`.
 - Avoid Claude-specific substitutions in shared instructions. Refer to the

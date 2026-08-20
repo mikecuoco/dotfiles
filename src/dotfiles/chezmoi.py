@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -163,10 +164,13 @@ def execute_template(
         )
 
 
-def _render_config(root: Path, profile: Optional[str]) -> str:
+def _render_config(
+    root: Path, profile: Optional[str], extra_env: Optional[dict] = None
+) -> str:
     """Render ``.chezmoi.toml.tmpl`` for *profile* without touching real state."""
     source = root / "home" if (root / ".chezmoiroot").is_file() else root
     env = {PROFILE_ENV: profile} if profile else {}
+    env.update(extra_env or {})
     return _template_output(
         ["--source", str(root), "--init"],
         (source / ".chezmoi.toml.tmpl").read_text(encoding="utf-8"),
@@ -264,17 +268,48 @@ def apply(
 
 
 def _apply_capsule(args: list[str], env: dict, quiet: bool) -> int:
-    """Second pass writing capsule-resident agent config. No-op off Code Ocean."""
+    """Second pass writing capsule-resident agent config. No-op off Code Ocean.
+
+    Rendered with its own config so the capsule gets mode = "file". Capsule
+    contents are versioned with the capsule and outlive any given clone of the
+    dotfiles source, so a symlink into that source would dangle after a rebuild.
+    """
     capsule = capsule_dir()
     if not capsule.is_dir():
         return 0
     if not quiet:
         print(f"Applying capsule-resident agent config → {capsule}")
-    return _run(
-        [*args, "--destination", str(capsule)],
-        env={**env, SCOPE_ENV: "capsule"},
-        capture=False,
-    ).returncode
+
+    capsule_env = {**env, SCOPE_ENV: "capsule"}
+    root = source_dir()
+    with tempfile.TemporaryDirectory() as tmp:
+        config = Path(tmp) / "chezmoi.toml"
+        config.write_text(
+            _render_config(
+                _working_tree(root) if root else Path.cwd(),
+                env.get(PROFILE_ENV),
+                extra_env=capsule_env,
+            )
+        )
+        result = _run(
+            ["--config", str(config), *args, "--destination", str(capsule)],
+            env=capsule_env,
+        )
+        _echo_filtered(result)
+        return result.returncode
+
+
+#: chezmoi warns whenever the config it was handed differs from what `init`
+#: would render. That is exactly what the capsule pass does on purpose.
+_EXPECTED_WARNING = "config file template has changed"
+
+
+def _echo_filtered(result: subprocess.CompletedProcess) -> None:
+    """Relay chezmoi output, dropping the expected config-mismatch warning."""
+    for stream, sink in ((result.stdout, sys.stdout), (result.stderr, sys.stderr)):
+        for line in (stream or "").splitlines():
+            if _EXPECTED_WARNING not in line:
+                print(line, file=sink)
 
 
 def update(quiet: bool = False) -> int:

@@ -11,8 +11,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import RESOURCES_DIR, chezmoi
-from .agent_skills import run_bundled_skills_setup
+from . import chezmoi
 
 
 def run_install(
@@ -21,7 +20,12 @@ def run_install(
     quiet: bool = False,
     refresh: bool = False,
 ) -> int:
-    """Apply the profile with chezmoi, then install bundled skills.
+    """Apply the active profile with chezmoi.
+
+    First-party agent skills are ordinary managed files under
+    ``home/dot_claude/skills/``, so they install with everything else.
+    GPTomics bioSkills are a separate, network-fetched concern: see
+    ``dotfiles skills install``.
 
     With *refresh*, the chezmoi source repository is pulled first, so the
     dotfiles themselves update and not just the package. This is what
@@ -35,29 +39,7 @@ def run_install(
     except chezmoi.ChezmoiError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
-    if rc:
-        return rc
-
-    # First-party skills are local, portable resources and are part of the core
-    # install. Downloaded GPTomics skill groups remain opt-in through
-    # ``dotfiles skills install``.
-    if not quiet:
-        print("\nAgent skills")
-    home = Path.home()
-    failed = False
-    for label, target in (
-        ("Claude Code", claude_skills_dir(home)),
-        ("Codex", home / ".agents" / "skills"),
-    ):
-        if not quiet:
-            print(f"  {label}")
-        statuses = run_bundled_skills_setup(
-            RESOURCES_DIR, target, dry_run=dry_run, quiet=quiet
-        )
-        if not dry_run:
-            failed = failed or any(not s.installed for s in statuses)
-
-    return 1 if failed else 0
+    return rc
 
 
 def claude_skills_dir(home: Optional[Path] = None) -> Path:

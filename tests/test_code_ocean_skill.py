@@ -11,10 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from dotfiles import RESOURCES_DIR
+from .conftest import REPO_ROOT
 
 
-SKILL = RESOURCES_DIR / "agents" / "skills" / "code-ocean-capsule"
+# First-party skills are chezmoi-managed source, not packaged resources.
+SKILL = REPO_ROOT / "home" / "dot_claude" / "skills" / "code-ocean-capsule"
 CHECKER = SKILL / "scripts" / "check_capsule.py"
 REFRESHER = SKILL / "scripts" / "refresh_datasets.py"
 

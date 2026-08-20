@@ -14,20 +14,12 @@ def _add_dry_run(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_skills_args(parser: argparse.ArgumentParser, verb: str) -> None:
-    """Add the flags shared by ``skills install`` and ``skills update``."""
-    parser.add_argument(
-        "--with",
-        dest="extra_groups",
-        action="append",
-        default=[],
-        metavar="GROUP",
-        help=f"Additional skill group to {verb}: spatial | genomics | all (repeatable)",
-    )
-    parser.add_argument(
-        "--allow-large",
-        action="store_true",
-        help="Allow the 561-skill 'all' group despite discovery-context costs",
-    )
+    """Add the flags shared by ``skills install`` and ``skills update``.
+
+    Which categories to install is configuration, not a flag: see
+    ``resources/agents/skills.toml``. As a flag it could only ever add skills,
+    never remove them, so narrowing the selection had no effect.
+    """
     _add_dry_run(parser)
 
 
@@ -131,7 +123,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # ── skills ───────────────────────────────────────────────────────────────
     p_skills = sub.add_parser(
         "skills",
-        help="Manage bundled and GPTomics skills for Claude Code and Codex",
+        help="Manage GPTomics bioSkills for Claude Code and Codex",
     )
     skills_sub = p_skills.add_subparsers(
         dest="skills_command",
@@ -144,11 +136,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _add_skills_args(skills_sub.add_parser(
         "install",
-        help="Install skills into ~/.claude/skills/ and ~/.agents/skills/",
+        help="Install GPTomics bioSkills into the managed skills directory",
     ), "install")
     _add_skills_args(skills_sub.add_parser(
         "update",
-        help="Refresh bundled skills and selected GPTomics groups",
+        help="Re-pull the GPTomics repository and refresh installed skills",
     ), "update")
 
     skills_sub.add_parser(
@@ -278,19 +270,15 @@ def _cmd_skills(args: argparse.Namespace):
     from .install import claude_skills_dir
 
     # Capsule-aware, matching where `dotfiles install` puts them.
+    # ~/.agents/skills is a chezmoi-managed symlink to the Claude directory,
+    # so both agents are served by writing once.
     target_dir = claude_skills_dir()
     codex_target_dir = Path.home() / ".agents" / "skills"
 
     if args.skills_command in {"install", "update"}:
-        groups = ["default"] + (args.extra_groups or [])
-        if "all" in groups and not args.allow_large:
-            args.group_parser.error("the 'all' group requires --allow-large")
         statuses = run_skills_setup(
             resources_dir=RESOURCES_DIR,
-            groups=groups,
-            cache_dir=Path.home() / ".local" / "share" / "dotfiles" / "bioskills",
             target_dir=target_dir,
-            codex_target_dir=codex_target_dir,
             dry_run=args.dry_run,
             update=args.skills_command == "update",
         )

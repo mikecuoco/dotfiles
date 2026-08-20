@@ -1,60 +1,28 @@
-# agents/skills.toml — shared agent skill configuration.
+# agents/skills.toml — GPTomics bioSkills configuration.
 #
-# Declares which GPTomics bioSkills categories to install alongside the
-# first-party directories bundled under agents/skills/. GPTomics skills
-# are fetched and installed for both Claude Code and Codex using the portable
-# bio-<category>-<skill>/SKILL.md directory layout.
+# First-party skills are not listed here: they live in the chezmoi source at
+# home/dot_claude/skills/ and are installed by `chezmoi apply` like any other
+# managed file.
 #
 # Usage:
-#   dotfiles skills install                    # bundled + default GPTomics group
-#   dotfiles skills install --with spatial     # default + spatial
-#   dotfiles skills install --with all         # everything (561 skills)
-#   dotfiles skills update                     # re-pull and refresh changed files
-#   dotfiles skills status                     # show bundled and bio-* skills
+#   dotfiles skills install    # install the selected categories
+#   dotfiles skills update     # re-pull the repository and refresh
+#   dotfiles skills status     # show what is installed
 
-# ── Source repository ─────────────────────────────────────────────────────────
+# Categories to install. An empty list installs everything — 562 skills across
+# 65 categories.
+#
+# Skill discovery loads every installed skill's name and description into the
+# agent's context. At time of writing that is roughly 71,000 estimated tokens
+# for the full set. If that proves too heavy, narrow it here rather than by
+# deleting installed directories: `dotfiles skills install` prunes anything no
+# longer selected, so removing a category actually uninstalls it.
+#
+#   categories = ["single-cell", "read-qc", "differential-expression"]
+#
+# Declared before [repo] on purpose — a bare key after a table header would be
+# parsed as part of that table.
+categories = []
+
 [repo]
 url = "https://github.com/GPTomics/bioSkills"
-
-# ── Default group ──────────────────────────────────────────────────────────────
-# Core skills for RNA-seq and single-cell analysis workflows.
-# Installed automatically by: dotfiles skills install
-[groups.default]
-description = "Core RNA-seq and single-cell analysis skills"
-categories = [
-    "single-cell",
-    "read-qc",
-    "differential-expression",
-    "rna-quantification",
-    "sequence-io",
-    "machine-learning",
-    "data-visualization",
-]
-
-# ── Spatial group ─────────────────────────────────────────────────────────────
-# Spatial transcriptomics skills.
-# Install with: dotfiles skills install --with spatial
-[groups.spatial]
-description = "Spatial transcriptomics skills"
-categories = [
-    "spatial-transcriptomics",
-]
-
-# ── Genomics group ────────────────────────────────────────────────────────────
-# Genome-level analysis skills.
-# Install with: dotfiles skills install --with genomics
-[groups.genomics]
-description = "Genome-level analysis: variant calling, alignment, copy-number"
-categories = [
-    "variant-calling",
-    "alignment",
-    "copy-number",
-]
-
-# ── All group ─────────────────────────────────────────────────────────────────
-# Install every available bioSkills category (561 skills across 63 categories).
-# Install with: dotfiles skills install --with all
-# Note: installs to ~/.claude/skills/ and ~/.agents/skills/ — large context footprint.
-[groups.all]
-description = "All 63 bioSkills categories (561 skills)"
-categories = []   # empty list = no category filter, installs everything

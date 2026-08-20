@@ -29,9 +29,10 @@ dotfiles update [--profile PROFILE] [--dry-run] [--quiet]
 
 `install` applies the active profile: symlinks for managed files, regenerated
 composed instruction files, and managed preferences merged into mutable JSON
-and TOML without replacing unrelated settings. It then installs the bundled
-agent skills. Before the first apply on a machine, any unmanaged file it is
-about to replace is copied to `<name>.dotfiles-backup.<UTC timestamp>`.
+and TOML without replacing unrelated settings. First-party agent skills are
+ordinary managed files, so they come with it. Before the first apply on a
+machine, any unmanaged file it is about to replace is copied to
+`<name>.dotfiles-backup.<UTC timestamp>`.
 
 | Option | Meaning |
 |---|---|
@@ -118,3 +119,20 @@ chezmoi -- the exact bytes that get installed -- for every profile. Its token co
 not results from a model tokenizer. It exits nonzero when the global
 instruction budget (900 estimated tokens) or an overlay budget (500) is
 exceeded.
+
+## Agent skills
+
+```bash
+dotfiles skills install [--dry-run]
+dotfiles skills update [--dry-run]
+dotfiles skills status
+```
+
+These manage the GPTomics bioSkills catalogue only. First-party skills install
+with `dotfiles install`, since they are part of the chezmoi source.
+
+Which categories to fetch is set in `resources/agents/skills.toml`, not on the
+command line — an empty list installs all 562. `install` prunes skills no
+longer selected, so narrowing that list uninstalls them. See
+[Shared agent skills](agent-skills.md) for the discovery-context cost of the
+full catalogue.
