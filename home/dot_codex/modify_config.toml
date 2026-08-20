@@ -1,0 +1,22 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /*
+   Merge dotfiles-managed Codex preferences into the app-managed config.
+
+   Reproduces install.py:_install_toml_merge. The managed block is delimited by
+   markers and PREPENDED; everything outside it is passed through byte for byte,
+   so Codex's own comments, key order and formatting survive. The source uses
+   root-level dotted keys precisely so prepending cannot change the scope of a
+   table the app owns further down the file.
+
+   A fromToml call at the end validates the result: if the merge would produce
+   invalid TOML (e.g. the unmanaged part already defines a managed key, which is
+   a duplicate-key error) template execution fails and chezmoi writes nothing.
+*/ -}}
+{{- $start := "# >>> dotfiles managed Codex preferences >>>" -}}
+{{- $end := "# <<< dotfiles managed Codex preferences <<<" -}}
+{{- $body := trim (includeTemplate "codex-preferences.toml" .) -}}
+{{- $block := printf "%s\n%s\n%s\n\n" $start $body $end -}}
+{{- $unmanaged := regexReplaceAll "(?s)\\Q# >>> dotfiles managed Codex preferences >>>\\E.*?\\Q# <<< dotfiles managed Codex preferences <<<\\E\n{0,2}" .chezmoi.stdin "" -}}
+{{- $merged := printf "%s%s" $block $unmanaged -}}
+{{- $_ := fromToml $merged -}}
+{{- $merged -}}

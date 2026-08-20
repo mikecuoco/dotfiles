@@ -1,0 +1,113 @@
+# ~/.exports.codeocean — Code Ocean-specific environment variables
+# Sourced after ~/.exports.linux in Code Ocean environments.
+#
+# Code Ocean manages scientific/system dependencies.
+# This file handles only personal interactive configuration.
+
+# Don't set LC_ALL inside containers (can break system tools)
+if [ -d /var/run/secrets/kubernetes.io ] || [ -n "$CODEOCEAN_ENV" ]; then
+    unset LC_ALL
+fi
+
+# The root filesystem is only ~5 GB. Keep all runtime temp files, caches,
+# environments, and user installations on the larger /scratch volume, grouped
+# beneath one hidden directory so they do not clutter analysis workspaces.
+if [ -d /scratch ]; then
+    _dotfiles_scratch="/scratch/.dotfiles"
+
+    export TMPDIR="${_dotfiles_scratch}/tmp"
+    export TMP="$TMPDIR"
+    export TEMP="$TMPDIR"
+    export XDG_CACHE_HOME="${_dotfiles_scratch}/cache"
+    export XDG_DATA_HOME="${_dotfiles_scratch}/xdg/data"
+    export XDG_STATE_HOME="${_dotfiles_scratch}/xdg/state"
+
+    export CONDA_PKGS_DIRS="${_dotfiles_scratch}/cache/conda-pkgs"
+    export CONDA_ENVS_PATH="${_dotfiles_scratch}/envs/conda"
+    export MAMBA_ROOT_PREFIX="${_dotfiles_scratch}/mamba"
+    export MAMBA_PKGS_DIRS="$CONDA_PKGS_DIRS"
+    export PIP_CACHE_DIR="${_dotfiles_scratch}/cache/pip"
+    export PYTHONUSERBASE="${_dotfiles_scratch}/python-user"
+    export PYTHONPYCACHEPREFIX="${_dotfiles_scratch}/cache/python-bytecode"
+    export VIRTUALENV_OVERRIDE_APP_DATA="${_dotfiles_scratch}/cache/virtualenv"
+    export PRE_COMMIT_HOME="${_dotfiles_scratch}/cache/pre-commit"
+    export UV_CACHE_DIR="${_dotfiles_scratch}/cache/uv"
+    export UV_TOOL_DIR="${_dotfiles_scratch}/envs/uv-tools"
+    export UV_TOOL_BIN_DIR="${_dotfiles_scratch}/bin"
+    export PIPX_HOME="${_dotfiles_scratch}/envs/pipx"
+    export PIPX_BIN_DIR="${_dotfiles_scratch}/bin"
+    export POETRY_CACHE_DIR="${_dotfiles_scratch}/cache/poetry"
+    export POETRY_DATA_DIR="${_dotfiles_scratch}/poetry"
+    export POETRY_VIRTUALENVS_PATH="${_dotfiles_scratch}/envs/poetry"
+    export WORKON_HOME="${_dotfiles_scratch}/envs/virtualenvs"
+
+    export NPM_CONFIG_CACHE="${_dotfiles_scratch}/cache/npm"
+    export NPM_CONFIG_PREFIX="${_dotfiles_scratch}/npm"
+    export COREPACK_HOME="${_dotfiles_scratch}/cache/corepack"
+    export PNPM_HOME="${_dotfiles_scratch}/pnpm"
+    export BUN_INSTALL="${_dotfiles_scratch}/bun"
+    export CARGO_HOME="${_dotfiles_scratch}/cargo"
+    export RUSTUP_HOME="${_dotfiles_scratch}/rustup"
+    export GOPATH="${_dotfiles_scratch}/go"
+    export GOBIN="${_dotfiles_scratch}/bin"
+    export GOCACHE="${_dotfiles_scratch}/cache/go-build"
+    export GOMODCACHE="${_dotfiles_scratch}/cache/go-mod"
+    export JULIA_DEPOT_PATH="${_dotfiles_scratch}/julia"
+    export RENV_PATHS_CACHE="${_dotfiles_scratch}/cache/renv"
+    export CCACHE_DIR="${_dotfiles_scratch}/cache/ccache"
+
+    export HF_HOME="${_dotfiles_scratch}/cache/huggingface"
+    export TORCH_HOME="${_dotfiles_scratch}/cache/torch"
+    export TORCH_EXTENSIONS_DIR="${_dotfiles_scratch}/build/torch-extensions"
+    export CUDA_CACHE_PATH="${_dotfiles_scratch}/cache/cuda"
+    export TRITON_CACHE_DIR="${_dotfiles_scratch}/cache/triton"
+    export JAX_COMPILATION_CACHE_DIR="${_dotfiles_scratch}/cache/jax"
+    export NUMBA_CACHE_DIR="${_dotfiles_scratch}/cache/numba"
+    export CUPY_CACHE_DIR="${_dotfiles_scratch}/cache/cupy"
+    export KERAS_HOME="${_dotfiles_scratch}/cache/keras"
+    export IPYTHONDIR="${_dotfiles_scratch}/cache/ipython"
+    export JUPYTER_RUNTIME_DIR="${_dotfiles_scratch}/runtime/jupyter"
+    export JUPYTER_DATA_DIR="${_dotfiles_scratch}/xdg/data/jupyter"
+    export R_LIBS_USER="${_dotfiles_scratch}/R/library"
+    export DASK_TEMPORARY_DIRECTORY="${_dotfiles_scratch}/tmp/dask"
+    export JOBLIB_TEMP_FOLDER="${_dotfiles_scratch}/tmp/joblib"
+    export RAY_TMPDIR="${_dotfiles_scratch}/tmp/ray"
+    export WANDB_DIR="${_dotfiles_scratch}/runtime/wandb"
+    export WANDB_CACHE_DIR="${_dotfiles_scratch}/cache/wandb"
+    export WANDB_ARTIFACT_DIR="${_dotfiles_scratch}/runtime/wandb-artifacts"
+    export APPTAINER_CACHEDIR="${_dotfiles_scratch}/cache/apptainer"
+    export APPTAINER_TMPDIR="${_dotfiles_scratch}/tmp/apptainer"
+    export SINGULARITY_CACHEDIR="$APPTAINER_CACHEDIR"
+    export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
+
+    # TMPDIR must already exist for programs such as mktemp. Other tools create
+    # their cache, data, environment, and installation directories on first use;
+    # avoid littering /scratch merely by starting a shell.
+    mkdir -p "$TMPDIR"
+
+    for _dotfiles_bin in \
+        "$UV_TOOL_BIN_DIR" \
+        "${NPM_CONFIG_PREFIX}/bin" \
+        "${PNPM_HOME}" \
+        "${BUN_INSTALL}/bin" \
+        "${CARGO_HOME}/bin" \
+        "$GOBIN"; do
+        case ":$PATH:" in
+            *":${_dotfiles_bin}:"*) ;;
+            *) PATH="${_dotfiles_bin}:$PATH" ;;
+        esac
+    done
+    export PATH
+
+    ulimit -c 0 2>/dev/null || true
+    unset _dotfiles_bin _dotfiles_scratch
+fi
+
+# ── Conda initialization ──────────────────────────────────────────────────────
+# On Code Ocean, conda is always installed at /opt/conda
+if [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
+    source "/opt/conda/etc/profile.d/conda.sh"
+fi
+
+# Install personal tools into a /scratch environment or user prefix. Record
+# scientific dependencies in environment recipes/locks for reproducibility.

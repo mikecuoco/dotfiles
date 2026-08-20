@@ -1,0 +1,60 @@
+{{/* Exclude every target that is not part of the active profile's layers. */}}
+{{- $layers := index .layers .profile -}}
+
+{{/*
+   .config/matplotlib/stylelib is deliberately NOT gated: macOS reaches the same
+   path via MPLCONFIGDIR (set in .exports.macos), so one source serves both
+   platforms instead of the stylelib existing twice under two destinations.
+*/}}
+
+{{- if not (has "macos" $layers) }}
+.aliases.macos
+.exports.macos
+.functions.macos
+.conda_build_config.yaml
+{{- end }}
+
+{{- if not (has "linux" $layers) }}
+.exports.linux
+{{- end }}
+
+{{- if not (has "cluster" $layers) }}
+.exports.cluster
+.functions.cluster
+.Rprofile
+{{- end }}
+
+{{- if not (has "codeocean" $layers) }}
+.exports.codeocean
+.claude.json
+{{- end }}
+
+{{- if not (has "codespace" $layers) }}
+.exports.codespace
+{{- end }}
+
+{{/*
+   Code Ocean splits its target state across two roots: agent config belongs in
+   the versioned capsule, everything else in $HOME.
+
+   chezmoi has no per-path destination, and a symlink from ~/.claude into the
+   capsule does NOT survive: chezmoi holds .claude as a directory in its target
+   state and replaces the symlink with a real directory on every apply. So the
+   capsule is applied as a second pass with its own --destination, selected by
+   DOTFILES_CHEZMOI_SCOPE=capsule. See docs/configuration.md.
+
+   Gated on the capsule existing, mirroring install.py's `_capsule.is_dir()`
+   fallback: off-platform this whole block disappears and .claude is managed in
+   $HOME exactly as before.
+*/}}
+{{- $capsule := env "DOTFILES_CAPSULE_DIR" | default "/root/capsule" -}}
+{{- if and (has "codeocean" $layers) (stat $capsule) }}
+{{-   if eq (env "DOTFILES_CHEZMOI_SCOPE") "capsule" }}
+*
+!.claude
+!.claude/**
+{{-   else }}
+.claude
+.claude/**
+{{-   end }}
+{{- end }}

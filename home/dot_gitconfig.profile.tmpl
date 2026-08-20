@@ -1,0 +1,24 @@
+{{- /*
+  Generated from the active profile; included by ~/.gitconfig.
+
+  This replaces install.py's _configure_git_credential_helper, which shelled
+  out to `git config --global`. Because ~/.gitconfig is a symlink into this
+  repository, those writes landed in the tracked source file rather than in the
+  user's home directory. Writing a separate, generated include has no such
+  failure mode.
+*/ -}}
+# Profile credential helpers — managed by chezmoi, do not edit.
+# Machine-specific overrides belong in ~/.gitconfig.local.
+{{ if eq .profile "macos" -}}
+[credential "https://github.com"]
+	helper = !/usr/bin/env gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = !/usr/bin/env gh auth git-credential
+{{ else if eq .profile "codespace" -}}
+[credential "https://github.com"]
+	helper = gh auth git-credential
+{{ else if eq .profile "cluster" -}}
+# No keychain on HPC login nodes; fall back to git's plaintext store.
+[credential]
+	helper = store
+{{ end -}}

@@ -1,0 +1,16 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /*
+   Merge dotfiles-owned keys into the app-managed ~/.claude.json.
+
+   Replaces install.py:_install_json_merge + _deep_merge_json (~55 lines).
+   setValueAtPath states exactly which keys we own, rather than deep-merging an
+   opaque overlay -- unrelated keys written by Claude Code are passed through.
+   The private_ prefix reproduces the old installer's 0600 mode for new files.
+*/ -}}
+{{- $cfg := dict -}}
+{{- if .chezmoi.stdin -}}
+{{-   $cfg = fromJson .chezmoi.stdin -}}
+{{- end -}}
+{{- $cfg = setValueAtPath "hasCompletedOnboarding" true $cfg -}}
+{{- /* chezmoi appends the trailing newline, matching json.dumps(...) + "\n" */ -}}
+{{- $cfg | toPrettyJson -}}

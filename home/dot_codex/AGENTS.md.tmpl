@@ -1,0 +1,7 @@
+{{- template "agents-preferences.md" . -}}
+{{- "\n\n" -}}
+{{- template "codex-instructions.md" . -}}
+{{- if has "codeocean" (index .layers .profile) -}}
+{{- "\n\n" -}}
+{{- template "codeocean-preferences.md" . -}}
+{{- end -}}

@@ -1,0 +1,20 @@
+# Poster figure default. Set figure size to the final placed dimensions when known.
+
+figure.figsize: 12, 8
+figure.dpi: 120
+figure.titlesize: 32
+
+font.size: 22
+axes.titlesize: 30
+axes.labelsize: 24
+xtick.labelsize: 20
+ytick.labelsize: 20
+legend.fontsize: 20
+legend.title_fontsize: 22
+
+axes.linewidth: 2.0
+lines.linewidth: 3.0
+lines.markersize: 9
+
+savefig.format: pdf
+savefig.dpi: 300

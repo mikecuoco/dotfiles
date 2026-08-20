@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jupyter Workflow"
+  short_description: "Build and verify reproducible notebooks"
+  default_prompt: "Use $jupyter-workflow to create or revise this notebook with a clean, reproducible execution flow."
