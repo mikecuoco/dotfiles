@@ -12,7 +12,7 @@ by Claude Code and Codex:
 ```
 
 First-party skills are stored under
-`src/dotfiles/resources/common/agents/skills/`. A normal `dotfiles install`
+`src/dotfiles/resources/agents/skills/`. A normal `dotfiles install`
 copies them to both personal discovery locations:
 
 - Claude Code: `~/.claude/skills/`
@@ -43,7 +43,7 @@ dotfiles skills install --with all --allow-large
 
 ## Authoring rules
 
-- Put cross-agent skills under `resources/common/agents/skills/`.
+- Put cross-agent skills under `resources/agents/skills/`.
 - Use only portable `name` and `description` frontmatter in `SKILL.md`.
 - Put Codex-only UI metadata under `agents/openai.yaml`.
 - Avoid Claude-specific substitutions in shared instructions. Refer to the

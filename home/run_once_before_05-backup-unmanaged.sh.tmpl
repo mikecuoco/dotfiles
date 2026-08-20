@@ -7,6 +7,11 @@
 # safety net for the one moment it matters: the first install onto a machine that
 # already has dotfiles. run_once_ means chezmoi runs it exactly once per machine.
 #
+# Only leaf targets are considered. Backing up a source *directory* would mean
+# copying whole trees such as ~/.config or ~/.vim, which can be enormous and
+# which chezmoi never replaces wholesale -- it only writes the individual files
+# inside them.
+#
 # Target names are derived from the source tree rather than hardcoded, so this
 # cannot drift as files are added. Nested `chezmoi` calls are NOT used: they
 # deadlock on the persistent-state lock while an apply is in progress.
@@ -15,42 +20,58 @@ set -eu
 SRC="${CHEZMOI_SOURCE_DIR:?}"
 DEST="{{ .chezmoi.destDir }}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-n=0
+COUNT_FILE="$(mktemp)"
+printf '0' > "$COUNT_FILE"
+LIST="$(mktemp)"
 
-for entry in "$SRC"/*; do
-    [ -e "$entry" ] || continue
-    name="$(basename "$entry")"
+# Every managed file, relative to the source root. Paths containing a dot-prefixed
+# segment are chezmoi's own (.chezmoiignore, .chezmoitemplates/, ...) and are
+# never installed as targets.
+find "$SRC" -type f | sed "s|^$SRC/||" | grep -Ev '(^|/)\.' > "$LIST" || true
 
-    case "$name" in
-        run_*|.chezmoi*) continue ;;
-    esac
+while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
 
-    # Strip chezmoi type/attribute prefixes to recover the target name.
-    while :; do
-        case "$name" in
-            encrypted_*|private_*|readonly_*|empty_*|executable_*|symlink_*|create_*|modify_*)
-                name="${name#*_}" ;;
-            *) break ;;
+    target="$DEST"
+    skip=0
+    # Translate each path segment: strip chezmoi attribute/type prefixes, then
+    # map dot_<name> back to .<name>.
+    oldIFS=$IFS; IFS=/
+    # shellcheck disable=SC2086
+    set -- $rel
+    IFS=$oldIFS
+    for seg in "$@"; do
+        case "$seg" in run_*) skip=1; break ;; esac
+        while :; do
+            case "$seg" in
+                encrypted_*|private_*|readonly_*|empty_*|executable_*|symlink_*|create_*|modify_*)
+                    seg="${seg#*_}" ;;
+                *) break ;;
+            esac
+        done
+        case "$seg" in
+            dot_*) seg=".${seg#dot_}" ;;
         esac
+        seg="${seg%.tmpl}"
+        target="$target/$seg"
     done
-    case "$name" in
-        dot_*) target="$DEST/.${name#dot_}" ;;
-        *)     continue ;;
-    esac
-    target="${target%.tmpl}"
+    [ "$skip" -eq 0 ] || continue
 
     # Nothing there, or already ours -- nothing to preserve.
     [ -e "$target" ] || continue
+    [ -d "$target" ] && continue
     if [ -L "$target" ]; then
         case "$(readlink "$target")" in "$SRC"/*) continue ;; esac
     fi
 
     backup="$target.dotfiles-backup.$STAMP"
     [ -e "$backup" ] && continue
-    cp -R "$target" "$backup"
-    n=$((n + 1))
-    echo "  backed up $(basename "$target") -> $(basename "$backup")"
-done
+    cp "$target" "$backup"
+    printf '%s' "$(( $(cat "$COUNT_FILE") + 1 ))" > "$COUNT_FILE"
+    echo "  backed up ${target#$DEST/} -> $(basename "$backup")"
+done < "$LIST"
 
+n="$(cat "$COUNT_FILE")"
+rm -f "$LIST" "$COUNT_FILE"
 [ "$n" -gt 0 ] && echo "  ($n unmanaged file(s) preserved before first apply)"
 exit 0

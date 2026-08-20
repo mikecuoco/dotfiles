@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from dotfiles import RESOURCES_DIR
+from .conftest import REPO_ROOT
 
 
-STYLE_DIR = RESOURCES_DIR / "common" / "matplotlib" / "stylelib"
+# Both macOS and Linux resolve here: .exports.macos pins MPLCONFIGDIR to
+# ~/.config/matplotlib so a single stylelib serves both platforms.
+STYLE_DIR = REPO_ROOT / "home" / "dot_config" / "matplotlib" / "stylelib"
 STYLE_NAMES = {
     "cuoco-base.mplstyle",
     "cuoco-manuscript.mplstyle",

@@ -1,0 +1,90 @@
+# ~/.exports.macos — macOS-specific environment variables
+# Sourced after ~/.exports on macOS via the platform overlay mechanism.
+
+# ── Homebrew ──────────────────────────────────────────────────────────────────
+# Initialize Homebrew — Apple Silicon (/opt/homebrew) or Intel (/usr/local)
+if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+fi
+export HOMEBREW_CASK_OPTS="--appdir=/Applications"
+
+# Cisco Secure Client (formerly AnyConnect)
+for _cisco_vpn_dir in /opt/cisco/secureclient/bin /opt/cisco/anyconnect/bin; do
+    if [ -x "$_cisco_vpn_dir/vpn" ]; then
+        case ":$PATH:" in
+            *":$_cisco_vpn_dir:"*) ;;
+            *) export PATH="$_cisco_vpn_dir:$PATH" ;;
+        esac
+        break
+    fi
+done
+unset _cisco_vpn_dir
+
+# Silence the "default shell is zsh" warning on macOS Catalina+
+export BASH_SILENCE_DEPRECATION_WARNING=1
+
+# ── iTerm2 shell integration ──────────────────────────────────────────────────
+[ -e "$HOME/.iterm2_shell_integration.bash" ] && \
+    source "$HOME/.iterm2_shell_integration.bash"
+
+# ── grc colorizer ─────────────────────────────────────────────────────────────
+# brew install grc
+if command -v grc &>/dev/null && [ "$TERM" != dumb ]; then
+    alias colourify="grc -es --colour=auto"
+    for _app in diff make gcc g++ ping traceroute; do
+        alias "$_app"="colourify $_app"
+    done
+    unset _app
+fi
+
+# ── Homebrew completion (bash-completion@2) ────────────────────────────────────
+if command -v brew &>/dev/null; then
+    _brew_prefix="$(brew --prefix)"
+    # bash-completion@2 (preferred)
+    if [ -r "$_brew_prefix/etc/profile.d/bash_completion.sh" ]; then
+        source "$_brew_prefix/etc/profile.d/bash_completion.sh"
+    elif [ -r "$_brew_prefix/share/bash-completion/bash_completion" ]; then
+        source "$_brew_prefix/share/bash-completion/bash_completion"
+    fi
+    unset _brew_prefix
+fi
+
+# ── gh completion ─────────────────────────────────────────────────────────────
+command -v gh &>/dev/null && eval "$(gh completion -s bash)" 2>/dev/null
+
+# ── zoxide / z ───────────────────────────────────────────────────────────────
+# Already handled in .bash_profile; this block handles the Homebrew z fallback
+if ! command -v zoxide &>/dev/null && command -v brew &>/dev/null; then
+    _z_path="$(brew --prefix)/etc/profile.d/z.sh"
+    [ -s "$_z_path" ] && source "$_z_path"
+    unset _z_path
+fi
+
+# ── Conda initialization ──────────────────────────────────────────────────────
+# Search common macOS conda installation paths (miniforge, mambaforge, miniconda)
+if [ -z "$CONDA_DEFAULT_ENV" ]; then
+    for _conda_root in \
+        "$HOME/miniforge3" \
+        "$HOME/mambaforge" \
+        "$HOME/miniconda3" \
+        "$HOME/anaconda3" \
+        "/opt/homebrew/Caskroom/miniforge/base" \
+        "/opt/homebrew/Caskroom/mambaforge/base"; do
+        if [ -f "$_conda_root/etc/profile.d/conda.sh" ]; then
+            source "$_conda_root/etc/profile.d/conda.sh"
+            break
+        fi
+    done
+    unset _conda_root
+fi
+
+# ── Matplotlib ────────────────────────────────────────────────────────────────
+# matplotlib defaults MPLCONFIGDIR to ~/.matplotlib on macOS and
+# ~/.config/matplotlib on Linux. Pinning it here lets one stylelib serve both
+# platforms instead of the same .mplstyle files being installed to two paths.
+export MPLCONFIGDIR="$HOME/.config/matplotlib"
+
+# ── Machine-specific exports ──────────────────────────────────────────────────
+# Add machine-specific paths (e.g. CROMWELL_JAR, tool-specific vars) to ~/.extra

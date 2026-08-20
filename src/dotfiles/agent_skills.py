@@ -41,7 +41,7 @@ class SkillGroupConfig:
 
 @dataclass
 class SkillsConfig:
-    """Top-level configuration loaded from ``common/agents/skills.toml``."""
+    """Top-level configuration loaded from ``agents/skills.toml``."""
 
     repo_url: str
     groups: dict[str, SkillGroupConfig]
@@ -151,8 +151,8 @@ def _portable_skill_bytes(path: Path, installed_name: str) -> bytes:
 # ── Config loading ────────────────────────────────────────────────────────────
 
 def load_skills_config(resources_dir: Path) -> SkillsConfig:
-    """Load bioSkills declarations from ``common/agents/skills.toml``."""
-    path = resources_dir / "common" / "agents" / "skills.toml"
+    """Load bioSkills declarations from ``agents/skills.toml``."""
+    path = resources_dir / "agents" / "skills.toml"
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
 
@@ -222,7 +222,7 @@ def _ensure_repo(repo_url: str, cache_dir: Path) -> bool:
 
 def _discover_bundled_skills(resources_dir: Path) -> list[Path]:
     """Return first-party skill directories bundled with the dotfiles."""
-    root = resources_dir / "common" / "agents" / "skills"
+    root = resources_dir / "agents" / "skills"
     if not root.is_dir():
         return []
     return sorted(

@@ -11,16 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from dotfiles.install import get_resources_dir
+from dotfiles import RESOURCES_DIR
 
 
-SKILL = (
-    get_resources_dir()
-    / "common"
-    / "agents"
-    / "skills"
-    / "code-ocean-capsule"
-)
+SKILL = RESOURCES_DIR / "agents" / "skills" / "code-ocean-capsule"
 CHECKER = SKILL / "scripts" / "check_capsule.py"
 REFRESHER = SKILL / "scripts" / "refresh_datasets.py"
 

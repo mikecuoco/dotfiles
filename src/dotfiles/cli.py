@@ -54,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--profile", "-p",
         metavar="PROFILE",
         help="Profile to install: macos | linux | cluster | codeocean | codespace "
-             "(auto-detected if omitted)",
+             "(keeps the configured profile if omitted, else auto-detected)",
     )
     _add_dry_run(p_install)
     p_install.add_argument(
@@ -63,16 +63,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Suppress routine install output; errors are still shown",
     )
     p_install.add_argument(
-        "--home",
-        metavar="DIR",
-        help="Override home directory (useful for testing)",
-    )
-    p_install.add_argument(
-        "--claude-home",
-        metavar="DIR",
-        help="Override base directory for .claude/ files and skills "
-             "(default: /root/capsule on Code Ocean when that path exists, "
-             "otherwise HOME)",
+        "--refresh",
+        action="store_true",
+        help="Pull the dotfiles source repository before applying",
     )
 
     # ── update ───────────────────────────────────────────────────────────────
@@ -238,15 +231,13 @@ def _build_parser() -> argparse.ArgumentParser:
 # deferring them keeps CLI startup fast.
 
 def _cmd_install(args: argparse.Namespace) -> int:
-    from pathlib import Path
     from .install import run_install
-    ok = run_install(
+    return run_install(
         profile=args.profile,
         dry_run=args.dry_run,
-        home=Path(args.home) if args.home else None,
         quiet=args.quiet,
+        refresh=args.refresh,
     )
-    return 0 if ok else 1
 
 
 def _cmd_update(args: argparse.Namespace) -> int:
@@ -284,8 +275,10 @@ def _cmd_skills(args: argparse.Namespace):
     from pathlib import Path
     from . import RESOURCES_DIR
     from .agent_skills import run_skills_setup, check_skill_statuses
+    from .install import claude_skills_dir
 
-    target_dir = Path.home() / ".claude" / "skills"
+    # Capsule-aware, matching where `dotfiles install` puts them.
+    target_dir = claude_skills_dir()
     codex_target_dir = Path.home() / ".agents" / "skills"
 
     if args.skills_command in {"install", "update"}:
@@ -384,13 +377,22 @@ def main() -> None:
 
 
 def _list_profiles() -> None:
-    from . import RESOURCES_DIR
-    from .profiles import load_profiles
-    profiles = load_profiles(RESOURCES_DIR)
+    from . import chezmoi
+    descriptions = chezmoi.profiles()
+    if not descriptions:
+        print("Could not read profiles from chezmoi — is it initialised?")
+        print("Run: dotfiles install")
+        return
+    layers = chezmoi.data().get("layers", {})
+    active = chezmoi.active_profile()
     print("Available profiles:\n")
-    for name, p in sorted(profiles.items()):
-        inherits = f"  (inherits: {', '.join(p.inherits)})" if p.inherits else ""
-        print(f"  {name:<12} {p.description}{inherits}")
+    for name in sorted(descriptions):
+        marker = " *" if name == active else "  "
+        inherited = [layer for layer in layers.get(name, []) if layer != name]
+        inherits = f"  (inherits: {', '.join(inherited)})" if inherited else ""
+        print(f"{marker}{name:<12} {descriptions[name]}{inherits}")
+    if active:
+        print("\n* active profile")
 
 
 def _version() -> str:

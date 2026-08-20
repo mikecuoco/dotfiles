@@ -1,17 +1,30 @@
 {{/*
    Profile selection.
 
-   Asked once per machine, then cached in ~/.config/chezmoi/chezmoi.toml.
-   Valid values: common | linux | codeocean
-   (macos, cluster and codespace are not yet ported.)
+   Precedence:
+     1. $DOTFILES_PROFILE      — explicit, wins every time
+     2. promptStringOnce       — asked once per machine, then cached
+
+   The env var is what makes `dotfiles install --profile X` work. chezmoi's
+   promptStringOnce stores its answer in the persistent state, so once a profile
+   has been chosen neither `init --promptString` nor `init --force` can change
+   it; reading the environment first is the supported way to override.
+   ~/.bash_profile already reads $DOTFILES_PROFILE for the same purpose, so the
+   name carries one meaning across both.
 
    The prompt text is deliberately just "profile": chezmoi keys --promptString
-   by the prompt *text*, not by the data key, so this is what makes unattended
+   by the prompt *text*, not by the data key, which is what makes unattended
    bootstrap read cleanly:
 
      chezmoi init --apply --promptString profile=codeocean <repo>
+
+   Valid values: macos | linux | cluster | codeocean | codespace
+   (`common` is a composition layer, not something to install directly.)
 */}}
-{{- $profile := promptStringOnce . "profile" "profile" "linux" -}}
+{{- $profile := env "DOTFILES_PROFILE" -}}
+{{- if not $profile -}}
+{{-   $profile = promptStringOnce . "profile" "profile" "linux" -}}
+{{- end -}}
 
 {{/*
    symlink mode reproduces the previous installer's semantics:
@@ -20,6 +33,15 @@
      - modify_ files     -> regular merged files                (was: mode "merge-*")
 */}}
 mode = "symlink"
+
+{{/*
+   Persist the source directory chosen at init time. chezmoi's --source is a
+   per-invocation flag, so without this a local checkout is forgotten after
+   `chezmoi init --source <path>` and later commands silently fall back to the
+   empty default (~/.local/share/chezmoi). workingTree is the repository root,
+   which keeps .chezmoiroot authoritative.
+*/}}
+sourceDir = {{ .chezmoi.workingTree | quote }}
 
 [data]
     profile = {{ $profile | quote }}

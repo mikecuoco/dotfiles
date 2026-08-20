@@ -56,7 +56,7 @@ pytest
 ```
 
 Resources live in `src/dotfiles/resources/`. Add or change a profile in
-`src/dotfiles/resources/profiles.toml`.
+`home/.chezmoidata/profiles.toml`.
 
 Fresh-machine setup scripts are in `src/dotfiles/resources/macos/setup/`.
 Cluster helpers are in `src/dotfiles/resources/cluster/setup/`.

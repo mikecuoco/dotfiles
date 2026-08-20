@@ -19,9 +19,9 @@ from dotfiles.agent_skills import (
     run_bundled_skills_setup,
     run_skills_setup,
 )
-from dotfiles.install import get_resources_dir
+from dotfiles import RESOURCES_DIR
 
-RESOURCES = get_resources_dir()
+RESOURCES = RESOURCES_DIR
 
 
 # ── Config loading ─────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ def _fake_bundled_skill(
 ) -> Path:
     """Create a resources tree containing one first-party skill."""
     resources = tmp_path / "resources"
-    skill = resources / "common" / "agents" / "skills" / name
+    skill = resources / "agents" / "skills" / name
     skill.mkdir(parents=True)
     content = files or {
         "SKILL.md": f"---\nname: {name}\ndescription: Test skill\n---\n",
@@ -135,7 +135,7 @@ def _fake_bundled_skill(
 # ── Bundled first-party skills ────────────────────────────────────────────────
 
 def test_code_ocean_skill_is_packaged():
-    skill = RESOURCES / "common" / "agents" / "skills" / "code-ocean-capsule"
+    skill = RESOURCES / "agents" / "skills" / "code-ocean-capsule"
     text = (skill / "SKILL.md").read_text(encoding="utf-8")
 
     assert "name: code-ocean-capsule" in text
@@ -197,7 +197,7 @@ def test_bundled_skill_update_removes_only_obsolete_managed_files(tmp_path):
     user_file = target / "example-skill" / "notes.md"
     user_file.write_text("keep me", encoding="utf-8")
 
-    source_skill = resources / "common" / "agents" / "skills" / "example-skill"
+    source_skill = resources / "agents" / "skills" / "example-skill"
     new_text = "---\nname: example-skill\ndescription: Test\n---\nnew\n"
     (source_skill / "SKILL.md").write_text(new_text, encoding="utf-8")
     (source_skill / "references" / "obsolete.md").unlink()
@@ -214,7 +214,7 @@ def test_removed_bundled_skill_is_pruned_from_managed_install(tmp_path):
     target = tmp_path / "target"
     run_bundled_skills_setup(resources, target)
 
-    source = resources / "common" / "agents" / "skills" / "example-skill"
+    source = resources / "agents" / "skills" / "example-skill"
     (source / "SKILL.md").unlink()
     source.rmdir()
     statuses = run_bundled_skills_setup(resources, target)
@@ -233,7 +233,7 @@ def test_removed_bundled_skill_preserves_user_files(tmp_path):
     user_file = target / "example-skill" / "notes.md"
     user_file.write_text("keep me", encoding="utf-8")
 
-    source = resources / "common" / "agents" / "skills" / "example-skill"
+    source = resources / "agents" / "skills" / "example-skill"
     (source / "SKILL.md").unlink()
     source.rmdir()
     statuses = run_bundled_skills_setup(resources, target)
@@ -248,7 +248,7 @@ def test_removed_bundled_skill_dry_run_writes_nothing(tmp_path):
     target = tmp_path / "target"
     run_bundled_skills_setup(resources, target)
 
-    source = resources / "common" / "agents" / "skills" / "example-skill"
+    source = resources / "agents" / "skills" / "example-skill"
     (source / "SKILL.md").unlink()
     source.rmdir()
     statuses = run_bundled_skills_setup(resources, target, dry_run=True)
@@ -265,7 +265,7 @@ def test_bundled_skill_update_refuses_new_path_that_collides_with_user_file(tmp_
     user_file = target / "example-skill" / "notes.md"
     user_file.write_text("user content", encoding="utf-8")
 
-    source_skill = resources / "common" / "agents" / "skills" / "example-skill"
+    source_skill = resources / "agents" / "skills" / "example-skill"
     (source_skill / "SKILL.md").write_text(
         "---\nname: example-skill\ndescription: Test\n---\nnew\n",
         encoding="utf-8",
