@@ -55,8 +55,9 @@ pip install -e .
 pytest
 ```
 
-Resources live in `src/dotfiles/resources/`. Add or change a profile in
-`src/dotfiles/resources/profiles.toml`.
+Dotfiles source lives in `home/` (the chezmoi root). Add or change a profile in
+`home/.chezmoidata/profiles.toml`. Agent skills are in `home/dot_claude/skills/`
+and are shared with Codex via `home/dot_agents/`.
 
-Fresh-machine setup scripts are in `src/dotfiles/resources/macos/setup/`.
-Cluster helpers are in `src/dotfiles/resources/cluster/setup/`.
+Python CLI resources live in `src/dotfiles/resources/`. Fresh-machine macOS setup
+scripts are in `scripts/setup/`.
