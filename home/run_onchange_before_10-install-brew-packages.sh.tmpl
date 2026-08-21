@@ -26,6 +26,20 @@ install_uv() {
     fi
 }
 
+install_node() {
+    command -v node >/dev/null 2>&1 && return 0
+    if command -v brew >/dev/null 2>&1; then
+        echo "==> brew install node"
+        brew install node
+    else
+        echo "==> installing node via fnm (~/.local/bin)"
+        curl -fsSL https://fnm.vercel.app/install | bash -s -- \
+            --install-dir "$HOME/.local/bin" --skip-shell
+        "$HOME/.local/bin/fnm" install --lts
+        eval "$("$HOME/.local/bin/fnm" env)"
+    fi
+}
+
 install_awscli() {
     command -v aws >/dev/null 2>&1 && return 0
     if command -v brew >/dev/null 2>&1; then
@@ -56,5 +70,6 @@ install_claude_code() {
 
 install_zoxide
 install_uv
+install_node
 install_awscli
 install_claude_code

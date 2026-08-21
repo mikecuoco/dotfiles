@@ -48,6 +48,11 @@ if [ -n "$_DF_PROFILE" ]; then
 fi
 unset _DF_PROFILE _df_file
 
+# ── Node.js (fnm) ─────────────────────────────────────────────────────────────
+if command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env --use-on-cd)"
+fi
+
 # ── Claude Code (npm fallback PATH) ───────────────────────────────────────────
 if ! command -v claude &>/dev/null && [ -d "$HOME/.npm-global/bin" ]; then
     export PATH="$HOME/.npm-global/bin:$PATH"
