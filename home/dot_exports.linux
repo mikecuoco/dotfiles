@@ -12,3 +12,25 @@ command -v gh &>/dev/null && eval "$(gh completion -s bash)" 2>/dev/null
 # Load system-wide bash completion if not already loaded
 [ -f /etc/bash_completion ] && [ -z "$BASH_COMPLETION_VERSINFO" ] && \
     source /etc/bash_completion
+
+# ── Conda / Mamba initialization ──────────────────────────────────────────────
+if [ -z "$CONDA_DEFAULT_ENV" ]; then
+    for _conda_root in \
+        "/opt/conda" \
+        "$HOME/miniforge3" \
+        "$HOME/mambaforge" \
+        "$HOME/miniconda3" \
+        "$HOME/anaconda3"; do
+        if [ -d "$_conda_root/bin" ]; then
+            export PATH="$_conda_root/bin:$PATH"
+            if [ -f "$_conda_root/bin/micromamba" ]; then
+                export MAMBA_ROOT_PREFIX="$_conda_root"
+                eval "$("$_conda_root/bin/micromamba" shell hook --shell bash 2>/dev/null)"
+            elif [ -f "$_conda_root/etc/profile.d/conda.sh" ]; then
+                source "$_conda_root/etc/profile.d/conda.sh"
+            fi
+            break
+        fi
+    done
+    unset _conda_root
+fi
