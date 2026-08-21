@@ -5,13 +5,7 @@ description: Create, revise, and review scientific plots and publication figures
 
 # Scientific Plotting
 
-Prefer concise seaborn calls and use matplotlib only when additional control is needed. Apply the shared styles with:
-
-```python
-plt.style.use(["cuoco-base", "cuoco-presentation"])
-```
-
-Use `cuoco-manuscript` or `cuoco-poster` when the deliverable calls for it. Do not duplicate settings already supplied by the shared styles; follow venue requirements and change the shared styles only when the change should become a global default.
+Prefer concise seaborn calls and use matplotlib only when additional control is needed.
 
 ## Design the figure
 

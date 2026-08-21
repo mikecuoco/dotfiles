@@ -111,19 +111,6 @@ def test_profile_overlays_are_exclusive(applied):
             assert not (home / rel).exists(), f"{profile} should not have {rel}"
 
 
-def test_matplotlib_stylelib_installed_for_every_platform(applied):
-    """One stylelib serves both platforms; macOS reaches it via MPLCONFIGDIR."""
-    _, home = applied
-    styles = home / ".config" / "matplotlib" / "stylelib"
-    assert styles.is_dir()
-    assert {p.name for p in styles.glob("*.mplstyle")} == {
-        "cuoco-base.mplstyle",
-        "cuoco-manuscript.mplstyle",
-        "cuoco-presentation.mplstyle",
-        "cuoco-poster.mplstyle",
-    }
-
-
 def test_vim_tree_is_per_file_symlinks(applied):
     """~/.vim expands to a real directory so vim's runtime state stays local."""
     _, home = applied

@@ -52,11 +52,6 @@ Profile overlays add the following paths:
 | `codeocean` | `.exports.codeocean`, Code Ocean agent guidance, merged `.claude.json` defaults |
 | `codespace` | `.exports.codespace` |
 
-Matplotlib styles install to `~/.config/matplotlib/stylelib` on every platform.
-macOS normally reads `~/.matplotlib`, so `.exports.macos` pins `MPLCONFIGDIR`
-to the Linux location; one stylelib then serves both rather than the same four
-files existing under two destinations.
-
 Shell overlays are sourced by `.bash_profile` at shell startup according to
 the active profile, which chezmoi writes to `~/.config/dotfiles/profile`.
 `$DOTFILES_PROFILE` overrides both the file and the chezmoi config.

@@ -80,11 +80,5 @@ if [ -z "$CONDA_DEFAULT_ENV" ]; then
     unset _conda_root
 fi
 
-# ── Matplotlib ────────────────────────────────────────────────────────────────
-# matplotlib defaults MPLCONFIGDIR to ~/.matplotlib on macOS and
-# ~/.config/matplotlib on Linux. Pinning it here lets one stylelib serve both
-# platforms instead of the same .mplstyle files being installed to two paths.
-export MPLCONFIGDIR="$HOME/.config/matplotlib"
-
 # ── Machine-specific exports ──────────────────────────────────────────────────
 # Add machine-specific paths (e.g. CROMWELL_JAR, tool-specific vars) to ~/.extra
