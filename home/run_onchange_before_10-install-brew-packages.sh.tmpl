@@ -1,0 +1,30 @@
+#!/bin/sh
+# Install required packages if absent.
+# run_onchange_: chezmoi reruns this whenever the script content changes,
+# so adding a package here ensures it gets installed on next apply.
+set -eu
+
+install_zoxide() {
+    command -v zoxide >/dev/null 2>&1 && return 0
+    if command -v brew >/dev/null 2>&1; then
+        echo "==> brew install zoxide"
+        brew install zoxide
+    else
+        echo "==> installing zoxide via official installer (~/.local/bin)"
+        curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+    fi
+}
+
+install_uv() {
+    command -v uv >/dev/null 2>&1 && return 0
+    if command -v brew >/dev/null 2>&1; then
+        echo "==> brew install uv"
+        brew install uv
+    else
+        echo "==> installing uv via official installer (~/.local/bin)"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+}
+
+install_zoxide
+install_uv
