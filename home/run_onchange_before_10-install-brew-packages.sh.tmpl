@@ -26,6 +26,23 @@ install_uv() {
     fi
 }
 
+install_awscli() {
+    command -v aws >/dev/null 2>&1 && return 0
+    if command -v brew >/dev/null 2>&1; then
+        echo "==> brew install awscli"
+        brew install awscli
+    else
+        echo "==> installing awscli via official installer (~/.local/bin)"
+        _arch="$(uname -m)"
+        _url="https://awscli.amazonaws.com/awscli-exe-linux-${_arch}.zip"
+        curl -fsSL "$_url" -o /tmp/awscliv2.zip
+        unzip -q /tmp/awscliv2.zip -d /tmp/awscliv2
+        /tmp/awscliv2/aws/install --install-dir "$HOME/.local/aws-cli" --bin-dir "$HOME/.local/bin"
+        rm -rf /tmp/awscliv2.zip /tmp/awscliv2
+        unset _arch _url
+    fi
+}
+
 install_claude_code() {
     command -v claude >/dev/null 2>&1 && return 0
     if command -v brew >/dev/null 2>&1; then
@@ -39,4 +56,5 @@ install_claude_code() {
 
 install_zoxide
 install_uv
+install_awscli
 install_claude_code
