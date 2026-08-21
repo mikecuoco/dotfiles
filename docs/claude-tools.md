@@ -41,8 +41,7 @@ requirements.
 
 | Service | Canonical environment variable | Alternative |
 |---|---|---|
-| Claude subscription OAuth | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` |
-| Anthropic API | `ANTHROPIC_API_KEY` | `claude auth login` |
+| Claude subscription OAuth ⭐ | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` |
 | GitHub | `GH_TOKEN` | Code Ocean `GIT_ACCESS_TOKEN` or `gh auth login` |
 | Synapse | `SYNAPSE_AUTH_TOKEN` | `synapse login` |
 | Code Ocean API | `CODEOCEAN_API_TOKEN` | — |
@@ -52,10 +51,15 @@ requirements.
 
 Set `CODEOCEAN_DOMAIN` for the non-secret Code Ocean host and
 `AWS_DEFAULT_REGION` when needed. Never commit credentials: use gitignored
-`~/.extra` locally or account Secrets in Code Ocean. Do not define
-`ANTHROPIC_API_KEY` together with `CLAUDE_CODE_OAUTH_TOKEN`, because the API
-key can override subscription OAuth. `ANTHROPIC_AUTH_TOKEN` is reserved for a
-custom bearer-token gateway.
+`~/.extra` locally or account Secrets in Code Ocean.
+
+**Claude authentication:** use `CLAUDE_CODE_OAUTH_TOKEN` (set via `claude
+setup-token`) as the sole Claude credential. `~/.exports` actively runs
+`unset ANTHROPIC_API_KEY` at shell startup, so the API key cannot shadow OAuth
+even if it leaks in from the environment. If you previously set
+`ANTHROPIC_API_KEY` as a Codespace Secret or in `~/.extra`, remove it there as
+well. `ANTHROPIC_AUTH_TOKEN` is reserved for a custom bearer-token gateway and
+should likewise not be set unless you are operating one.
 
 In a Codespace, Code Ocean capsule, or other ephemeral environment:
 

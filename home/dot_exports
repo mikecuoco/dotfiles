@@ -31,3 +31,8 @@ unset _d
 
 # Cargo / Rust
 [ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+# Subscription OAuth (CLAUDE_CODE_OAUTH_TOKEN) is the preferred auth method.
+# Unset the API key so it cannot shadow OAuth even if injected by the environment.
+unset ANTHROPIC_API_KEY
