@@ -1,5 +1,7 @@
 # Mike's dotfiles
 
+[![tests](https://github.com/mikecuoco/dotfiles/actions/workflows/tests.yml/badge.svg)](https://github.com/mikecuoco/dotfiles/actions/workflows/tests.yml)
+
 Cross-platform dotfiles for macOS, Linux, HPC clusters, GitHub Codespaces, and
 Code Ocean. They are managed by [chezmoi](https://www.chezmoi.io), a single
 static binary — no Python, and no root required.
@@ -43,6 +45,13 @@ The one requirement the command cannot supply is `chezmoi` on `PATH` — tests t
 apply a profile skip without it. Note also that `uv run` reuses a virtualenv
 found in the working directory or a parent when it satisfies `--python`, so a
 stray `.venv` changes which interpreter you get.
+
+`.github/workflows/tests.yml` runs that same command on `ubuntu-latest` and
+`macos-latest` for every pull request, adding `--with ruamel.yaml` so the suite's
+one optional import does not silently skip. Applying a profile is hermetic:
+`$DOTFILES_SKIP_PACKAGE_INSTALL` (set by `tests/conftest.py`) stops each apply
+from rerunning the package installer, which a throwaway `$HOME` would otherwise
+trigger every time.
 
 Dotfiles source lives in `home/` (the chezmoi root). Add or change a profile in
 `home/.chezmoidata/profiles.toml`. Agent skills are in `home/dot_claude/skills/`

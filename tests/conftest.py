@@ -86,11 +86,19 @@ def chezmoi_env(home: Path, capsule: Path | None = None, scope: str = "") -> dic
     /root/capsule: home/.chezmoiignore stats it for the codeocean profile, and
     `stat` raises -- aborting the whole apply -- when the path is unreadable
     rather than merely absent, which is the case for any non-root user.
+
+    $DOTFILES_SKIP_PACKAGE_INSTALL keeps the suite hermetic. Every apply here
+    gets a fresh $HOME and so an empty chezmoi state, which makes
+    run_onchange_before_10-install-brew-packages.sh rerun for each one. It is a
+    no-op on a developer machine that already has zoxide, uv, node, awscli and
+    claude-code -- which is why this went unnoticed -- but on a machine missing
+    any of them the suite would install it from the network once per apply.
     """
     env = {**os.environ}
     env.pop("DOTFILES_PROFILE", None)
     env["DOTFILES_CHEZMOI_SCOPE"] = scope
     env["DOTFILES_CAPSULE_DIR"] = str(capsule if capsule else home / "capsule")
+    env["DOTFILES_SKIP_PACKAGE_INSTALL"] = "1"
     env["HOME"] = str(home)
     return env
 
