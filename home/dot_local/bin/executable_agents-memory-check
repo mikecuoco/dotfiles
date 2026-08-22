@@ -1,0 +1,95 @@
+#!/bin/sh
+# Validate a repository's shared project memories under .agents/memory/.
+#
+# Referenced by the generated ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, so it
+# has to stay agent-agnostic: plain POSIX sh, no Python, no tool-specific flags.
+#
+# Usage: agents-memory-check [repo]        (default: the enclosing Git repo)
+#
+# Exits 0 when every memory satisfies the contract in docs/project-memory.md,
+# 1 otherwise. An absent .agents/memory/ is fine -- memory is opt-in.
+set -u
+
+MAX_LINES=100
+MAX_BYTES=32768
+
+repo="${1:-}"
+if [ -z "$repo" ]; then
+    repo="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+fi
+dir="$repo/.agents/memory"
+rc=0
+
+fail() {
+    echo "  x $1: $2" >&2
+    rc=1
+}
+
+if [ ! -e "$dir" ]; then
+    echo "  - .agents/memory/: not initialized (nothing to check)"
+    exit 0
+fi
+if [ -L "$dir" ] || [ ! -d "$dir" ]; then
+    fail ".agents/memory/" "must be a regular directory"
+    exit 1
+fi
+
+# Memories are local notes, never committed. Probe a path inside the directory
+# so the check works for both `.agents/memory/` and `.agents/memory` patterns.
+if git -C "$repo" check-ignore -q -- ".agents/memory/probe.md" 2>/dev/null; then
+    echo "  ok .agents/memory/: ignored by Git"
+else
+    fail ".agents/memory/" "not ignored by Git -- add '.agents/memory/' to .gitignore"
+fi
+
+for path in "$dir"/*; do
+    [ -e "$path" ] || continue          # unmatched glob
+    base="${path##*/}"
+    rel=".agents/memory/$base"
+
+    if [ -L "$path" ]; then
+        fail "$rel" "symlinks are not allowed"
+        continue
+    fi
+    if [ -d "$path" ]; then
+        fail "$rel" "nested directories are not allowed"
+        continue
+    fi
+
+    printf '%s' "$base" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*\.md$' \
+        || fail "$rel" "filename must use lowercase hyphenated words ending in .md"
+
+    bytes=$(wc -c <"$path")
+    [ "$bytes" -le "$MAX_BYTES" ] || fail "$rel" "exceeds $MAX_BYTES bytes"
+
+    lines=$(wc -l <"$path")
+    [ "$lines" -le "$MAX_LINES" ] || fail "$rel" "exceeds $MAX_LINES lines"
+
+    # A level-one title on the first non-blank line, with actual text after it.
+    first=$(grep -m1 -v '^[[:space:]]*$' "$path" 2>/dev/null || true)
+    printf '%s' "$first" | grep -Eq '^# +[^[:space:]]' \
+        || fail "$rel" "first content line must be a level-one title"
+
+    if grep -q -- '-----BEGIN ' "$path" && grep -q -- 'PRIVATE KEY-----' "$path"; then
+        fail "$rel" "contains a private-key marker"
+    fi
+
+    # Secret assignments. The Python original used a PCRE negative lookahead;
+    # `grep -P` is absent on macOS/BSD, so match first and then drop obvious
+    # placeholders. Line-wise rather than match-wise, which also gives a line
+    # number. Assigned to a variable, not piped -- a pipeline subshell could not
+    # set rc.
+    hits=$(grep -Ein \
+        '(api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)[[:space:]]*[:=][[:space:]]*"?'"'"'?[A-Za-z0-9_./+=-]{12,}' \
+        "$path" 2>/dev/null \
+        | grep -Eiv '[:=][[:space:]]*"?'"'"'?(\$|<|redacted|example|placeholder)' \
+        || true)
+    if [ -n "$hits" ]; then
+        fail "$rel" "possible secret assignment on line ${hits%%:*}"
+    fi
+done
+
+if [ "$rc" -eq 0 ]; then
+    echo "  ok .agents/memory/: valid"
+fi
+exit "$rc"

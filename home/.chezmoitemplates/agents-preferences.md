@@ -42,8 +42,8 @@
   decision. Update or remove stale and conflicting memories instead of adding
   duplicates.
 - Treat memories as advisory and verify material claims against current project
-  files. After changing memory, run `dotfiles memory check --repo <repo>` and
-  mention any file created, updated, or removed in the final response.
+  files. After changing memory, run `agents-memory-check` and mention any file
+  created, updated, or removed in the final response.
 - Do not store transcripts, task status, secrets, sensitive data, or facts that
   are already clear from project files. Keep required rules in checked-in
   project instructions or documentation.

@@ -28,24 +28,28 @@ Required rules belong in checked-in `AGENTS.md`, `CLAUDE.md`, or project
 documentation. Memories are advisory and material claims should be checked
 against the current repository before use.
 
-## Commands
+## Validating
 
 ```bash
-dotfiles memory init [--repo DIR]
-dotfiles memory list [--repo DIR] [--json]
-dotfiles memory check [--repo DIR] [--json]
-dotfiles memory migrate [--repo DIR] [--apply]
+agents-memory-check [repo]        # default: the enclosing Git repository
 ```
 
-`init` safely creates the directory. `list` prints filenames, titles, and line
-counts without displaying memory bodies. `check` validates names, size, title,
-file type, basic secret patterns, and Git ignore behavior.
+Checks that `.agents/memory/` is ignored by Git, then validates every memory
+against the contract above: filename form, 100-line and 32 KiB ceilings, a
+level-one title on the first content line, no symlinks or nested directories,
+and no private-key markers or secret-looking assignments. Every violation is
+reported, and the exit status is non-zero if there was any, so it works as a
+pre-commit or CI gate. An absent `.agents/memory/` is not an error — memory is
+opt-in.
 
-`migrate` inspects `.claude/memory/`, `.codex/memories/`, and
-`.agents/memories/`. Its default mode is a plan. `--apply` copies only files
-that already satisfy the current contract. It never deletes legacy files,
-copies symlinks, or automatically converts session summaries; those require
-manual review and splitting into topic memories.
+The generated `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` tell both agents to
+run it after changing memory.
+
+**Removed:** `dotfiles memory init`, `list`, and `migrate`. Creating the
+directory is `mkdir -p .agents/memory` (the ignore rule is already global, in
+`home/dot_gitignore`), listing it is `ls`, and the migration from the obsolete
+`.claude/memory/`, `.codex/memories/`, and `.agents/memories/` layouts is
+finished. See git history if you need the old implementations.
 
 ## Native memory systems
 

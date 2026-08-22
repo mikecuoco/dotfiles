@@ -68,6 +68,17 @@ install_claude_code() {
     fi
 }
 
+# Applying into a throwaway $HOME -- what the test suite does, and what CI
+# does -- starts from empty chezmoi state, so run_onchange_ has no record of
+# this script and reruns it for every apply. The tests assert what apply
+# *renders*, never that packages got installed, and on a machine missing any of
+# these the unguarded script would fetch it from the network once per apply.
+# Unset on a real machine, where installing is the entire point.
+if [ -n "${DOTFILES_SKIP_PACKAGE_INSTALL:-}" ]; then
+    echo "==> DOTFILES_SKIP_PACKAGE_INSTALL set, skipping package installation"
+    exit 0
+fi
+
 install_zoxide
 install_uv
 install_node

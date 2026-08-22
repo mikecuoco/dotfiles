@@ -2,7 +2,7 @@
 # Back up pre-existing unmanaged dotfiles before the first apply on this machine.
 #
 # The legacy installer created <file>.dotfiles-backup.<utc-timestamp> whenever it
-# was about to replace something it did not already own (install.py:_backup_path).
+# was about to replace something it did not already own (the former Python installer's backup path).
 # chezmoi has no equivalent -- it overwrites silently -- so this restores the
 # safety net for the one moment it matters: the first install onto a machine that
 # already has dotfiles. run_once_ means chezmoi runs it exactly once per machine.
