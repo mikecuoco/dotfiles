@@ -1,45 +1,26 @@
 # Mike's dotfiles
 
-A cross-platform dotfiles manager for macOS, Linux, HPC clusters, GitHub
-Codespaces, and Code Ocean. It is packaged as a Python CLI, so installation is
-one command wherever Python 3.8+ is available.
+Cross-platform dotfiles for macOS, Linux, HPC clusters, GitHub Codespaces, and
+Code Ocean. They are managed by [chezmoi](https://www.chezmoi.io), a single
+static binary — no Python, and no root required.
 
 ## Quick start
 
 ```bash
-# Install globally with uv (recommended)
-uv tool install git+https://github.com/mikecuoco/dotfiles
+# to install for the first time
+sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply mikecuoco
 
-# Or install a development checkout
-git clone https://github.com/mikecuoco/dotfiles && cd dotfiles
-pip install -e .
-
-# Install the automatically detected profile
-dotfiles install
-
-# Preview changes, check health, or upgrade and reapply configuration
-dotfiles install --dry-run
-dotfiles doctor
-dotfiles update
+# to sync with the remote
+chezmoi update
 ```
 
-For legacy images that require `setup.py develop`, install `setuptools` first:
-
-```bash
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e git+https://github.com/mikecuoco/dotfiles.git#egg=mike-dotfiles
-```
-
-For deployed environments such as Code Ocean capsules, prefer the
-non-editable install:
-
-```bash
-python -m pip install git+https://github.com/mikecuoco/dotfiles.git
-```
+On Code Ocean, use `dotfiles-sync` instead of `chezmoi apply`/`chezmoi update`:
+agent configuration lives in the versioned capsule, which needs a second pass.
+See [Installing and syncing](docs/installing.md).
 
 ## Documentation
 
-- [CLI reference](docs/cli-reference.md) — install, update, checks, profiles, and context budgets.
+- [Installing and syncing](docs/installing.md) — bootstrap, day-to-day commands, rootless install, Code Ocean.
 - [Profiles and configuration](docs/configuration.md) — detection, installed files, overlays, and merge behavior.
 - [Agent skills](docs/agent-skills.md) — shared Claude Code and Codex skills.
 - [Claude Code integrations](docs/claude-tools.md) — plugins, MCP servers, and authentication.
@@ -51,13 +32,14 @@ python -m pip install git+https://github.com/mikecuoco/dotfiles.git
 ```bash
 git clone https://github.com/mikecuoco/dotfiles
 cd dotfiles
-pip install -e .
 pytest
 ```
 
+Nothing to install: the tests import only the standard library and pytest.
+They need `chezmoi` on `PATH` (tests that apply profiles skip without it) and
+Python 3.11+ for `tomllib`.
+
 Dotfiles source lives in `home/` (the chezmoi root). Add or change a profile in
 `home/.chezmoidata/profiles.toml`. Agent skills are in `home/dot_claude/skills/`
-and are shared with Codex via `home/dot_agents/`.
-
-Python CLI resources live in `src/dotfiles/resources/`. Fresh-machine macOS setup
-scripts are in `scripts/setup/`.
+and are shared with Codex via `home/dot_agents/`. Managed helper commands are in
+`home/dot_local/bin/`.

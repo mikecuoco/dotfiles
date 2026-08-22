@@ -1,55 +1,110 @@
-"""Tests for agent skill metadata parsing and health reporting.
+"""Tests for the agent skill frontmatter contract.
 
 Installation is chezmoi's job — see tests/test_chezmoi_render.py. What is
-covered here is the frontmatter contract both Claude Code and Codex rely on,
-and the status reporting `dotfiles doctor` builds on top of it.
+covered here is the `SKILL.md` frontmatter contract that both Claude Code and
+Codex rely on, asserted against the skills actually checked into `home/`.
+
+A skill whose `name` is missing, malformed, or disagrees with its directory is
+silently not loaded by either agent, which is exactly the kind of failure a test
+should catch rather than a per-machine health command: the source is the same
+everywhere, so this is a repository invariant.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-from dotfiles.agent_skills import (
-    SkillMetadata,
-    _parse_skill_metadata_text,
-    check_skill_statuses,
-)
+from .conftest import REPO_ROOT
+
+SKILLS_DIR = REPO_ROOT / "home" / "dot_claude" / "skills"
+
+#: Both agents require a lowercase, hyphenated, filesystem-safe name.
+NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
-def _skill(target: Path, name: str, frontmatter: str) -> Path:
-    """Write an installed skill directory called *name*."""
-    skill = target / name
-    skill.mkdir(parents=True, exist_ok=True)
-    (skill / "SKILL.md").write_text(frontmatter, encoding="utf-8")
-    return skill
+def parse_skill_metadata(text: str) -> tuple[str, str]:
+    """Return (name, description) from a SKILL.md, or raise ValueError.
 
+    A deliberately small YAML subset — the portable frontmatter format shared by
+    Claude Code and Codex: plain scalars, single/double-quoted scalars, and
+    literal (`|`) or folded (`>`, `>-`) block scalars. Unrelated keys are
+    ignored, since Codex adds its own (`tool_type`, `primary_tool`).
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise ValueError("missing YAML frontmatter")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        raise ValueError("missing YAML frontmatter") from None
 
-def _valid(name: str) -> str:
-    return f"---\nname: {name}\ndescription: Does a thing.\n---\n\nBody.\n"
+    fields: dict[str, str] = {}
+    i = 1
+    while i < end:
+        line = lines[i]
+        i += 1
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if ":" not in line or line.startswith((" ", "\t")):
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip()
+        value = value.strip()
+
+        if value.startswith(("|", ">")):
+            folded = value.startswith(">")
+            block: list[str] = []
+            while i < end and (not lines[i].strip() or lines[i].startswith((" ", "\t"))):
+                block.append(lines[i].strip())
+                i += 1
+            joined = " ".join(b for b in block if b) if folded else "\n".join(block)
+            fields[key] = joined.strip()
+            continue
+
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        fields[key] = value
+
+    name = fields.get("name", "")
+    description = fields.get("description", "")
+    if not name:
+        raise ValueError("missing skill name")
+    if not description:
+        raise ValueError("missing skill description")
+    if not NAME_RE.match(name):
+        raise ValueError(f"invalid skill name: {name!r}")
+    return name, description
 
 
 # ── Frontmatter parsing ───────────────────────────────────────────────────────
 
 def test_parses_plain_scalars():
-    meta = _parse_skill_metadata_text(_valid("example-skill"))
-    assert meta == SkillMetadata(name="example-skill", description="Does a thing.")
+    text = "---\nname: example-skill\ndescription: Does a thing.\n---\n\nBody.\n"
+    assert parse_skill_metadata(text) == ("example-skill", "Does a thing.")
 
 
 @pytest.mark.parametrize("quoted", ['"Quoted value."', "'Quoted value.'"])
 def test_parses_quoted_descriptions(quoted):
     text = f"---\nname: example\ndescription: {quoted}\n---\n"
-    assert _parse_skill_metadata_text(text).description == "Quoted value."
+    assert parse_skill_metadata(text)[1] == "Quoted value."
 
 
 def test_parses_literal_block_scalar():
     text = "---\nname: example\ndescription: |\n  First line.\n  Second line.\n---\n"
-    assert _parse_skill_metadata_text(text).description == "First line.\nSecond line."
+    assert parse_skill_metadata(text)[1] == "First line.\nSecond line."
 
 
 def test_parses_folded_block_scalar():
     text = "---\nname: example\ndescription: >\n  First line.\n  Second line.\n---\n"
-    assert _parse_skill_metadata_text(text).description == "First line. Second line."
+    assert parse_skill_metadata(text)[1] == "First line. Second line."
+
+
+def test_parses_stripped_folded_block_scalar():
+    """`>-` is what the bundled brisc skill actually uses."""
+    text = "---\nname: example\ndescription: >-\n  First line.\n  Second line.\n---\n"
+    assert parse_skill_metadata(text)[1] == "First line. Second line."
 
 
 def test_ignores_unrelated_frontmatter_keys():
@@ -58,9 +113,7 @@ def test_ignores_unrelated_frontmatter_keys():
         "---\nname: example\ntool_type: cli\n"
         "description: Does a thing.\nprimary_tool: samtools\n---\n"
     )
-    meta = _parse_skill_metadata_text(text)
-    assert meta.name == "example"
-    assert meta.description == "Does a thing."
+    assert parse_skill_metadata(text) == ("example", "Does a thing.")
 
 
 @pytest.mark.parametrize(
@@ -74,44 +127,35 @@ def test_ignores_unrelated_frontmatter_keys():
 )
 def test_rejects_malformed_metadata(text, reason):
     with pytest.raises(ValueError, match=reason):
-        _parse_skill_metadata_text(text)
+        parse_skill_metadata(text)
 
 
-# ── Status reporting (used by doctor) ─────────────────────────────────────────
+# ── The skills actually shipped in home/ ──────────────────────────────────────
 
-def test_empty_when_directory_missing(tmp_path):
-    assert check_skill_statuses(tmp_path / "nope") == []
-
-
-def test_empty_for_empty_directory(tmp_path):
-    (tmp_path / "skills").mkdir()
-    assert check_skill_statuses(tmp_path / "skills") == []
+def _bundled_skills() -> list[Path]:
+    return sorted(p for p in SKILLS_DIR.iterdir() if (p / "SKILL.md").is_file())
 
 
-def test_reports_installed_skills(tmp_path):
-    _skill(tmp_path, "alpha", _valid("alpha"))
-    _skill(tmp_path, "beta", _valid("beta"))
-    statuses = check_skill_statuses(tmp_path)
-    assert [s.name for s in statuses] == ["alpha", "beta"]
-    assert all(s.installed and s.category == "first-party" for s in statuses)
+def test_repository_ships_skills():
+    """Guard against the glob silently going empty after a move."""
+    assert _bundled_skills(), f"no SKILL.md found under {SKILLS_DIR}"
 
 
-def test_flags_metadata_name_not_matching_its_directory(tmp_path):
-    """A mismatch stops the agent loading the skill, so it is not 'installed'."""
-    _skill(tmp_path, "alpha", _valid("something-else"))
-    status = check_skill_statuses(tmp_path)[0]
-    assert status.installed is False
-    assert "does not match directory" in status.message
+@pytest.mark.parametrize(
+    "skill", _bundled_skills(), ids=lambda p: p.name
+)
+def test_bundled_skill_frontmatter_is_valid(skill):
+    """Every shipped skill parses and its name matches its directory."""
+    name, description = parse_skill_metadata(
+        (skill / "SKILL.md").read_text(encoding="utf-8")
+    )
+    assert name == skill.name, (
+        f"{skill.name}/SKILL.md declares name {name!r}; a mismatch means neither "
+        "Claude Code nor Codex will load the skill."
+    )
+    assert description.strip(), f"{skill.name} has an empty description"
 
 
-def test_flags_unparseable_skill(tmp_path):
-    _skill(tmp_path, "alpha", "no frontmatter\n")
-    status = check_skill_statuses(tmp_path)[0]
-    assert status.installed is False
-    assert "invalid skill" in status.message
-
-
-def test_ignores_directories_without_a_skill_file(tmp_path):
-    (tmp_path / "not-a-skill").mkdir()
-    _skill(tmp_path, "alpha", _valid("alpha"))
-    assert [s.name for s in check_skill_statuses(tmp_path)] == ["alpha"]
+def test_bundled_skill_names_are_unique():
+    names = [p.name for p in _bundled_skills()]
+    assert len(names) == len(set(names))

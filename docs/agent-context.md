@@ -9,20 +9,22 @@ retrieve specialized knowledge when needed instead of pre-loading everything.
 
 ```text
 canonical:
-    common/agents/PREFERENCES.md       shared cross-agent preferences
-    common/agents/skills/              shared cross-agent workflows
-    common/agents/skills.toml          optional external skill groups
+    home/.chezmoitemplates/
+        agents-preferences.md          shared cross-agent preferences
+        claude-instructions.md         Claude-specific supplement
+        codex-instructions.md          Codex-specific supplement
+        codeocean-preferences.md       appended for the Code Ocean profile
+        codex-preferences.toml         Codex config fragment
 
-tool-specific:
-    common/claude/CLAUDE.md            Claude delegation policy
-    common/codex/AGENTS.md             Codex delegation policy
-
-environment-specific:
-    codeocean/agents/PREFERENCES.md    appended for the Code Ocean profile
+sources:
+    home/dot_claude/CLAUDE.md.tmpl     composes shared + Claude + environment
+    home/dot_codex/AGENTS.md.tmpl      composes shared + Codex + environment
+    home/dot_claude/skills/            shared cross-agent workflows
 
 installed:
     ~/.claude/CLAUDE.md                shared + Claude + environment
     ~/.codex/AGENTS.md                 shared + Codex + environment
+    ~/.agents/skills -> ~/.claude/skills
 
 project-specific:
     <repo>/CLAUDE.md or AGENTS.md      stable project conventions
@@ -35,8 +37,8 @@ learned/temporary:
     scratch context                    project-local or discardable state
 ```
 
-The installer generates the two global instruction files from the canonical
-shared preferences and their small tool-specific supplements. This keeps
+chezmoi generates the two global instruction files from the canonical shared
+preferences and their small tool-specific supplements. This keeps
 Claude and Codex aligned without putting Claude model names in Codex guidance.
 
 ### What belongs where
@@ -83,8 +85,8 @@ task status, secrets, sensitive data, or facts already evident from project
 files. Update or remove stale and conflicting files rather than accumulating
 duplicates.
 
-See [Shared project memory](project-memory.md) for the file contract, CLI
-validation, and conservative legacy migration behavior.
+See [Shared project memory](project-memory.md) for the file contract and the
+`agents-memory-check` validator.
 
 **Bad:**
 
@@ -104,16 +106,12 @@ Global preferences should change only for genuinely cross-project behavior.
 
 ## Measuring context size
 
-Use the compatibility-aware reporter:
+Budgets are enforced by the test suite, not at runtime — these files are
+generated from the source tree, so their size is a repository invariant:
 
 ```bash
-dotfiles agent-stats
+pytest -k budget
 ```
-
-`dotfiles claude-stats` remains an alias. The report measures the effective
-Claude and Codex global instructions plus any environment overlays.
-
-Budgets are warnings rather than hard runtime limits:
 
 | Layer | Estimated-token limit |
 |---|---:|
@@ -121,7 +119,9 @@ Budgets are warnings rather than hard runtime limits:
 | Environment overlay | 500 |
 
 The deterministic estimate is `words × 4/3` and requires no tokenizer or
-external service.
+external service. The budgets and the estimator live in
+`tests/test_claude_context.py`; a failing assertion prints the measured count.
+To inspect an installed file directly, `wc -w ~/.claude/CLAUDE.md`.
 
 ## Memory maintenance
 

@@ -139,7 +139,7 @@ cond() {
     elif command -v conda &>/dev/null; then
         _exe="$(command -v conda)"
     else
-        echo "conda / mamba / micromamba not found. Check your PATH or run dotfiles install." >&2
+        echo "conda / mamba / micromamba not found. Check your PATH, or install micromamba." >&2
         return 1
     fi
 

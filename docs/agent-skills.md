@@ -12,8 +12,8 @@ by Claude Code and Codex:
 ```
 
 First-party skills live in the chezmoi source at `home/dot_claude/skills/` and
-install like any other managed file — `chezmoi apply` (or `dotfiles install`)
-puts them in `~/.claude/skills/`.
+install like any other managed file — `chezmoi apply` puts them in
+`~/.claude/skills/`.
 
 `~/.agents/skills` is a managed symlink to that directory, so Codex reads the
 same tree. The two used to be independent copies kept in step by the installer;
@@ -22,13 +22,15 @@ has one destination rather than two.
 
 ## Adding a skill
 
-Create a directory under `home/dot_claude/skills/` and re-run `dotfiles
-install`. `dotfiles doctor` reports every installed skill and flags any whose
-`SKILL.md` fails to parse or whose metadata `name` does not match its directory
-— a mismatch stops the agent loading it.
+Create a directory under `home/dot_claude/skills/` and re-run `chezmoi apply`.
+
+`tests/test_agent_skills.py` validates every shipped `SKILL.md`: the frontmatter
+must parse, and its `name` must match the directory — a mismatch stops both
+Claude Code and Codex loading the skill, silently. Run `pytest -k skill` after
+adding one.
 
 > **Removed:** the GPTomics bioSkills integration (`dotfiles skills
-> install|update|status`) was dropped. Installing the full catalogue cost
+> install|update|status`) was dropped, along with the `dotfiles` CLI itself. Installing the full catalogue cost
 > roughly 71,000 estimated tokens of skill-discovery context across 562 skills,
 > which every session paid for. The implementation is in git history if it is
 > wanted again.

@@ -6,7 +6,6 @@ intentionally tolerant of wording changes but strict about:
 - token budgets
 - content isolation (no environment-specific text leaking into global)
 - composition correctness
-- estimation determinism
 """
 from __future__ import annotations
 
@@ -14,9 +13,7 @@ import json
 
 import pytest
 
-from dotfiles import RESOURCES_DIR
-from dotfiles._toml import tomllib
-from dotfiles.claude_stats import estimate_tokens, GLOBAL_BUDGET, OVERLAY_BUDGET
+import tomllib
 
 from .conftest import (
     REPO_ROOT,
@@ -25,6 +22,19 @@ from .conftest import (
     render,
     requires_chezmoi,
 )
+
+# ── context budget contract ───────────────────────────────────────────────────
+# Agent instructions are loaded into every session, so their size is a hard
+# invariant rather than a report. These budgets are documented in
+# docs/agent-context.md; this module is the only thing that enforces them.
+GLOBAL_BUDGET = 900
+OVERLAY_BUDGET = 500
+
+
+def estimate_tokens(text: str) -> int:
+    """Words x 4/3, rounded down -- a standard BPE approximation for prose."""
+    return len(text.split()) * 4 // 3
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -222,9 +232,6 @@ def test_shared_project_memory_uses_singular_agent_directory():
         assert obsolete not in text
         assert obsolete not in GLOBAL_GITIGNORE.read_text()
     assert "memories = true" not in CODEX_SETTINGS.read_text()
-    assert not (
-        RESOURCES_DIR / "agents" / "skills" / "session-handoff"
-    ).exists()
 
 
 def test_no_codeocean_text_in_global():
@@ -290,82 +297,4 @@ def test_agent_instructions_are_generated_files_and_idempotent(tmp_path, target)
     assert chezmoi_status(tmp_path) == ""
 
 
-# ── determinism test ─────────────────────────────────────────────────────────
-
-def test_estimate_tokens_deterministic():
-    """Token estimation must be purely deterministic."""
-    sample = "This is a sample agent instruction with some technical words."
-    assert estimate_tokens(sample) == estimate_tokens(sample)
-    assert estimate_tokens(sample) == estimate_tokens(sample)
-
-    # Also verify the formula: words * 4 // 3
-    words = len(sample.split())
-    expected = words * 4 // 3
-    assert estimate_tokens(sample) == expected
-
-
-def test_estimate_tokens_empty():
-    assert estimate_tokens("") == 0
-
-
-def test_estimate_tokens_no_external_calls(monkeypatch):
-    """estimate_tokens must not make any I/O or subprocess calls."""
-    import subprocess
-    original_run = subprocess.run
-
-    called = []
-
-    def mock_run(*args, **kwargs):
-        called.append(args)
-        return original_run(*args, **kwargs)
-
-    monkeypatch.setattr(subprocess, "run", mock_run)
-    estimate_tokens("hello world test")
-    assert not called, "estimate_tokens should not call subprocess.run"
-
-
 # ── idempotency test ─────────────────────────────────────────────────────────
-
-# ── agent-stats output test ──────────────────────────────────────────────────
-
-def test_agent_stats_output_contains_no_secret_values(capsys):
-    """The compatibility command must never print secret values."""
-    import os
-    from dotfiles.claude_stats import run_claude_stats
-
-    fake_secrets = [
-        "sk-ant-FAKESECRET123",
-        "oauth-FAKESECRET123",
-        "ghp_FAKEGITHUBTOKEN456",
-        "synapse-fake-token",
-        "codeocean-fake-token",
-        "AKIAFAKEAWSKEY789",
-        "fake-aws-session-token",
-        "fake-mem0-key-abc",
-        "fake-openai-key-xyz",
-    ]
-    env_patch = {
-        "ANTHROPIC_API_KEY": fake_secrets[0],
-        "CLAUDE_CODE_OAUTH_TOKEN": fake_secrets[1],
-        "GH_TOKEN": fake_secrets[2],
-        "SYNAPSE_AUTH_TOKEN": fake_secrets[3],
-        "CODEOCEAN_API_TOKEN": fake_secrets[4],
-        "AWS_ACCESS_KEY_ID": fake_secrets[5],
-        "AWS_SESSION_TOKEN": fake_secrets[6],
-        "MEM0_API_KEY": fake_secrets[7],
-        "OPENAI_API_KEY": fake_secrets[8],
-    }
-    original = {k: os.environ.get(k) for k in env_patch}
-    try:
-        os.environ.update(env_patch)
-        run_claude_stats()
-        captured = capsys.readouterr()
-        output = captured.out + captured.err
-        for secret in fake_secrets:
-            assert secret not in output, f"Secret value '{secret}' leaked into claude-stats output"
-    finally:
-        for k, v in original.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v

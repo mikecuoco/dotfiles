@@ -5,7 +5,7 @@
      1. $DOTFILES_PROFILE      — explicit, wins every time
      2. promptStringOnce       — asked once per machine, then cached
 
-   The env var is what makes `dotfiles install --profile X` work. chezmoi's
+   $DOTFILES_PROFILE is how you override the cached answer: chezmoi's
    promptStringOnce stores its answer in the persistent state, so once a profile
    has been chosen neither `init --promptString` nor `init --force` can change
    it; reading the environment first is the supported way to override.
@@ -21,9 +21,45 @@
    Valid values: macos | linux | cluster | codeocean | codespace
    (`common` is a composition layer, not something to install directly.)
 */}}
+{{/*
+   Detection, used only as the prompt's default. Ported from the former Python
+   installer's platform.py so a first apply on a Mac does not default to linux.
+
+   Checks run least- to most-specific and each overwrites the last, which gives
+   the same precedence the installer had by returning on its first match:
+   codespace > codeocean > cluster > macos/linux. The prompt still lets you
+   override, and its answer -- not this default -- is what gets cached.
+*/}}
+{{- $detected := "linux" -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{-   $detected = "macos" -}}
+{{- end -}}
+{{- $hostname := lower .chezmoi.hostname -}}
+{{- range $kw := list "login" "head" "compute" "node" "hpc" "cluster" "slurm"
+                     "tscc" "comet" "expanse" "stampede" "bridges" "sherlock"
+                     "frontier" "summit" "pbs" -}}
+{{-   if contains $kw $hostname -}}
+{{-     $detected = "cluster" -}}
+{{-   end -}}
+{{- end -}}
+{{- range $var := list "SLURM_JOB_ID" "PBS_JOBID" "SGE_TASK_ID" "LSB_JOBID" -}}
+{{-   if env $var -}}
+{{-     $detected = "cluster" -}}
+{{-   end -}}
+{{- end -}}
+{{- range $var := list "CO_CAPSULE_ID" "CO_PIPELINE_ID" "CO_COMPUTATION_ID"
+                       "CODEOCEAN_ENV" "CO_REPO_ID" -}}
+{{-   if env $var -}}
+{{-     $detected = "codeocean" -}}
+{{-   end -}}
+{{- end -}}
+{{- if or (eq (env "CODESPACES") "true") (env "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN") -}}
+{{-   $detected = "codespace" -}}
+{{- end -}}
+
 {{- $profile := env "DOTFILES_PROFILE" -}}
 {{- if not $profile -}}
-{{-   $profile = promptStringOnce . "profile" "profile" "linux" -}}
+{{-   $profile = promptStringOnce . "profile" "profile" $detected -}}
 {{- end -}}
 
 {{/*
@@ -35,7 +71,7 @@
    The Code Ocean capsule is the exception. Its contents are versioned with the
    capsule and must survive a rebuild that happens before the dotfiles source is
    cloned back, so symlinks into the source tree would dangle. That pass renders
-   its own config with mode = "file"; see chezmoi.py:_apply_capsule.
+   its own config with mode = "file"; see dot_local/bin/executable_dotfiles-sync.
 */}}
 mode = {{ if eq (env "DOTFILES_CHEZMOI_SCOPE") "capsule" }}"file"{{ else }}"symlink"{{ end }}
 
