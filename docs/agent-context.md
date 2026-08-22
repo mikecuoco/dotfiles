@@ -110,7 +110,7 @@ Budgets are enforced by the test suite, not at runtime — these files are
 generated from the source tree, so their size is a repository invariant:
 
 ```bash
-pytest -k budget
+uv run --python '>=3.11' --with pytest pytest -k budget
 ```
 
 | Layer | Estimated-token limit |

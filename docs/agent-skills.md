@@ -26,8 +26,8 @@ Create a directory under `home/dot_claude/skills/` and re-run `chezmoi apply`.
 
 `tests/test_agent_skills.py` validates every shipped `SKILL.md`: the frontmatter
 must parse, and its `name` must match the directory — a mismatch stops both
-Claude Code and Codex loading the skill, silently. Run `pytest -k skill` after
-adding one.
+Claude Code and Codex loading the skill, silently. Run
+`uv run --python '>=3.11' --with pytest pytest -k skill` after adding one.
 
 > **Removed:** the GPTomics bioSkills integration (`dotfiles skills
 > install|update|status`) was dropped, along with the `dotfiles` CLI itself. Installing the full catalogue cost

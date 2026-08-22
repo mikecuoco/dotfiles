@@ -32,12 +32,17 @@ See [Installing and syncing](docs/installing.md).
 ```bash
 git clone https://github.com/mikecuoco/dotfiles
 cd dotfiles
-pytest
+uv run --python '>=3.11' --with pytest pytest
 ```
 
-Nothing to install: the tests import only the standard library and pytest.
-They need `chezmoi` on `PATH` (tests that apply profiles skip without it) and
-Python 3.11+ for `tomllib`.
+There is nothing to install: the tests import only the standard library and
+pytest, and the command above supplies both the runner and the Python 3.11+ that
+`tomllib` needs. If pytest is already on your `PATH`, bare `pytest` works too.
+
+The one requirement the command cannot supply is `chezmoi` on `PATH` — tests that
+apply a profile skip without it. Note also that `uv run` reuses a virtualenv
+found in the working directory or a parent when it satisfies `--python`, so a
+stray `.venv` changes which interpreter you get.
 
 Dotfiles source lives in `home/` (the chezmoi root). Add or change a profile in
 `home/.chezmoidata/profiles.toml`. Agent skills are in `home/dot_claude/skills/`
