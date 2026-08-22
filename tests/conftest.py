@@ -32,6 +32,26 @@ requires_chezmoi = pytest.mark.skipif(
 #: Profiles that can be installed directly. `common` is a composition layer.
 INSTALLABLE_PROFILES = ("macos", "linux", "cluster", "codeocean", "codespace")
 
+#: Variables that move chezmoi's own config and state out of $HOME. Pinning HOME
+#: is not enough on their own account: chezmoi honours $XDG_CONFIG_HOME over
+#: $HOME, and GitHub's ubuntu runner images export it. Every test would then
+#: share one config, so `promptStringOnce` would answer `profile` once for the
+#: whole session and every later apply would silently install the first
+#: profile -- `macos`, whatever the fixture asked for.
+#:
+#: Dropped rather than repointed, so each platform keeps the native default a
+#: real machine would use (~/.config on Linux, Library/Application Support on
+#: macOS) instead of a layout invented here.
+_XDG_VARS = ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")
+
+
+def _env_without_xdg() -> dict:
+    """A copy of the environment that leaves chezmoi anchored to $HOME."""
+    env = {**os.environ}
+    for var in _XDG_VARS:
+        env.pop(var, None)
+    return env
+
 
 def _tmp_base_with_plain_permissions() -> Path | None:
     """A scratch base whose new directories get ordinary umask permissions.
@@ -93,8 +113,11 @@ def chezmoi_env(home: Path, capsule: Path | None = None, scope: str = "") -> dic
     no-op on a developer machine that already has zoxide, uv, node, awscli and
     claude-code -- which is why this went unnoticed -- but on a machine missing
     any of them the suite would install it from the network once per apply.
+
+    The $XDG_* variables are dropped (see _XDG_VARS) so the pinned $HOME is
+    really where chezmoi keeps its config and persistent state.
     """
-    env = {**os.environ}
+    env = _env_without_xdg()
     env.pop("DOTFILES_PROFILE", None)
     env["DOTFILES_CHEZMOI_SCOPE"] = scope
     env["DOTFILES_CAPSULE_DIR"] = str(capsule if capsule else home / "capsule")
@@ -152,7 +175,11 @@ def _render_config(profile: str, scope: str = "") -> str:
     global, hence the argument order. $DOTFILES_PROFILE is what selects the
     profile, so promptStringOnce is never reached and this stays non-interactive.
     """
-    env = {**os.environ, "DOTFILES_PROFILE": profile, "DOTFILES_CHEZMOI_SCOPE": scope}
+    env = {
+        **_env_without_xdg(),
+        "DOTFILES_PROFILE": profile,
+        "DOTFILES_CHEZMOI_SCOPE": scope,
+    }
     return subprocess.run(
         ["chezmoi", "--source", str(REPO_ROOT), "execute-template", "--init"],
         input=CONFIG_TEMPLATE.read_text(encoding="utf-8"),
@@ -185,7 +212,7 @@ def render(template_relpath: str, profile: str) -> str:
         return subprocess.run(
             ["chezmoi", "--config", str(config), "execute-template"],
             input=body,
-            env=os.environ.copy(),
+            env=_env_without_xdg(),
             capture_output=True,
             text=True,
             check=True,
