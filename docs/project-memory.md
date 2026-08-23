@@ -43,7 +43,9 @@ pre-commit or CI gate. An absent `.agents/memory/` is not an error — memory is
 opt-in.
 
 The generated `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` tell both agents to
-run it after changing memory.
+read memory relevant to the task. Writing one is a procedure rather than a
+standing rule, so it lives in the `project-memory` skill, which carries this
+command and the routing decision for what belongs in memory at all.
 
 **Removed:** `dotfiles memory init`, `list`, and `migrate`. Creating the
 directory is `mkdir -p .agents/memory` (the ignore rule is already global, in

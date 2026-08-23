@@ -1,12 +1,6 @@
 {{/* Exclude every target that is not part of the active profile's layers. */}}
 {{- $layers := index .layers .profile -}}
 
-{{/*
-   .config/matplotlib/stylelib is deliberately NOT gated: macOS reaches the same
-   path via MPLCONFIGDIR (set in .exports.macos), so one source serves both
-   platforms instead of the stylelib existing twice under two destinations.
-*/}}
-
 {{- if not (has "macos" $layers) }}
 .aliases.macos
 .exports.macos

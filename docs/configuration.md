@@ -102,11 +102,11 @@ are never copied wholesale.
 
 ### Two known deviations
 
-`~/.vim` and the Matplotlib stylelib become real directories of per-file
-symlinks rather than single directory symlinks. This is deliberate: under the
-old scheme vim wrote its runtime state (`viminfo`, `.VimballRecord`,
-`plugged/`) straight into the git repository. Tracked config still resolves
-back to the repo, while runtime state stays local.
+`~/.vim` becomes a real directory of per-file symlinks rather than a single
+directory symlink. This is deliberate: under the old scheme vim wrote its
+runtime state (`viminfo`, `.VimballRecord`, `plugged/`) straight into the git
+repository. Tracked config still resolves back to the repo, while runtime state
+stays local.
 
 Profile-specific git credential helpers are written to `~/.gitconfig.profile`
 and pulled in by an `[include]` in the managed `~/.gitconfig`. The previous

@@ -13,6 +13,7 @@ canonical:
         agents-preferences.md          shared cross-agent preferences
         claude-instructions.md         Claude-specific supplement
         codex-instructions.md          Codex-specific supplement
+        cluster-preferences.md         appended for the HPC cluster profile
         codeocean-preferences.md       appended for the Code Ocean profile
         codex-preferences.toml         Codex config fragment
 
