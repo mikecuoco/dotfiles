@@ -1,23 +1,21 @@
 """End-to-end checks that chezmoi installs each profile correctly.
 
-This replaces the parity harness that compared chezmoi against the Python
-installer. With the installer gone there is nothing to diff against, so the
-properties it verified are asserted directly: the right targets exist, they are
+chezmoi is the only installer, so there is nothing to diff against and the
+properties are asserted directly: the right targets exist, they are
 the right *kind* of thing (symlink vs generated vs merged), app-managed state
 survives, and re-applying changes nothing.
 """
 from __future__ import annotations
 
 import json
-import sys
+import tomllib
 
 import pytest
 
-from dotfiles._toml import tomllib
 from .conftest import (
     INSTALLABLE_PROFILES,
     apply_chezmoi,
-    init_chezmoi,
+    sync_codeocean,
     chezmoi_status,
     requires_chezmoi,
 )
@@ -244,20 +242,12 @@ def test_capsule_pass_writes_real_files_not_symlinks(tmp_path):
     happens before the dotfiles are cloned back, so that pass renders its own
     config with mode = "file".
     """
-    import os
-    import subprocess
-
     home = tmp_path / "home"
     capsule = tmp_path / "capsule"
     home.mkdir()
     capsule.mkdir()
-    init_chezmoi(home, "codeocean")
 
-    env = {**os.environ, "HOME": str(home), "DOTFILES_CAPSULE_DIR": str(capsule)}
-    result = subprocess.run(
-        [sys.executable, "-m", "dotfiles", "install", "--quiet"],
-        env=env, capture_output=True, text=True, check=False,
-    )
+    result = sync_codeocean(home, capsule)
     assert result.returncode == 0, result.stderr
 
     settings = capsule / ".claude" / "settings.json"
@@ -269,19 +259,11 @@ def test_capsule_pass_writes_real_files_not_symlinks(tmp_path):
 
 def test_capsule_pass_keeps_claude_out_of_home(tmp_path):
     """The two roots partition cleanly; nothing is written to both."""
-    import os
-    import subprocess
-
     home = tmp_path / "home"
     capsule = tmp_path / "capsule"
     home.mkdir()
     capsule.mkdir()
-    init_chezmoi(home, "codeocean")
 
-    env = {**os.environ, "HOME": str(home), "DOTFILES_CAPSULE_DIR": str(capsule)}
-    subprocess.run(
-        [sys.executable, "-m", "dotfiles", "install", "--quiet"],
-        env=env, capture_output=True, text=True, check=False,
-    )
+    assert sync_codeocean(home, capsule).returncode == 0
     assert not (home / ".claude" / "CLAUDE.md").exists()
     assert (home / ".agents" / "skills").is_symlink()

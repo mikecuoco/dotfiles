@@ -1,5 +1,5 @@
 # ~/.aws/config — AWS CLI configuration
-# Managed by dotfiles. Edit: src/dotfiles/resources/common/aws/config
+# Managed by dotfiles. Edit: home/dot_aws/config in the dotfiles repo
 #
 # To find account IDs: open the SSO portal in a browser and log in.
 #   https://identitycenter.amazonaws.com/ssoins-7907e1277625ab90

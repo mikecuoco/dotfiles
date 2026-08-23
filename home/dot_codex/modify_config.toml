@@ -2,7 +2,7 @@
 {{- /*
    Merge dotfiles-managed Codex preferences into the app-managed config.
 
-   Reproduces install.py:_install_toml_merge. The managed block is delimited by
+   Reproduces the former Python installer's marker-block TOML merge. The managed block is delimited by
    markers and PREPENDED; everything outside it is passed through byte for byte,
    so Codex's own comments, key order and formatting survive. The source uses
    root-level dotted keys precisely so prepending cannot change the scope of a

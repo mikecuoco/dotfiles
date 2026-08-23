@@ -1,0 +1,57 @@
+#!/bin/sh
+# Apply these dotfiles, including the Code Ocean capsule second pass.
+#
+# `chezmoi apply` writes exactly one destination. Code Ocean needs two: shell
+# dotfiles in $HOME, agent config in the versioned capsule (see
+# home/.chezmoiignore). chezmoi has no per-path destination, and the second pass
+# cannot live in a run_ script either -- invoking chezmoi from inside an apply
+# deadlocks on the persistent-state lock. So the sequence lives here: three
+# chezmoi calls, which is all the deleted Python installer ever added.
+#
+# Off Code Ocean the capsule does not exist and this is just init + apply.
+#
+# Usage: dotfiles-sync [chezmoi apply flags...]     e.g. dotfiles-sync --dry-run
+set -eu
+
+CAPSULE="${DOTFILES_CAPSULE_DIR:-/root/capsule}"
+# Both passes need this: home/.chezmoiignore gates the capsule block on it, and
+# home/dot_agents/symlink_skills.tmpl points ~/.agents/skills at it.
+export DOTFILES_CAPSULE_DIR="$CAPSULE"
+
+# Re-render ~/.config/chezmoi/chezmoi.toml so $DOTFILES_PROFILE takes effect.
+# promptStringOnce caches its answer in the persistent state, where neither
+# `init --promptString` nor `init --force` can reach it; the environment
+# variable is the supported override.
+chezmoi init
+chezmoi apply "$@"
+
+# -- Pass 2: capsule-resident agent config -----------------------------------
+[ -d "$CAPSULE" ] || exit 0
+
+SRC="$(chezmoi source-path)"   # <repo>/home
+ROOT="$(dirname "$SRC")"       # <repo> -- the working tree holding .chezmoiroot
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+
+# The capsule needs mode = "file" rather than "symlink": its contents are
+# versioned with the capsule and outlive any given clone of this source, so a
+# symlink into the source tree would dangle after a rebuild. mode is a config
+# setting, not a flag, so this pass renders a config of its own.
+# --init is a subcommand flag; --source is global. Hence the order.
+DOTFILES_CHEZMOI_SCOPE=capsule \
+    chezmoi --source "$ROOT" execute-template --init \
+    <"$SRC/.chezmoi.toml.tmpl" >"$TMP/chezmoi.toml"
+
+echo "Applying capsule-resident agent config -> $CAPSULE"
+set +e
+DOTFILES_CHEZMOI_SCOPE=capsule \
+    chezmoi --config "$TMP/chezmoi.toml" apply --destination "$CAPSULE" "$@" \
+    2>"$TMP/stderr"
+rc=$?
+set -e
+
+# chezmoi warns whenever the config it was handed differs from what `init` would
+# render. That is exactly what this pass does, deliberately.
+grep -v 'config file template has changed' <"$TMP/stderr" >&2 || true
+exit "$rc"

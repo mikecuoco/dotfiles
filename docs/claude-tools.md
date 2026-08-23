@@ -1,43 +1,68 @@
 # Claude Code integrations
 
-This guide covers the optional Claude Code setup commands. Run `dotfiles
-doctor` after setup to inspect the resulting integration and skill state.
+## Plugins and marketplaces
 
-## Plugins and MCP servers
+Plugins are **declared, not installed by a script.** They live in
+`home/dot_claude/settings.json`, which chezmoi installs as `~/.claude/settings.json`:
 
-```bash
-dotfiles claude setup [--with bioinformatics]... [--dry-run]
+```json
+"enabledPlugins": {
+  "github@claude-plugins-official": true,
+  "pubmed@life-sciences": true,
+  "synapse@life-sciences": true,
+  "pyright-lsp@claude-plugins-official": true
+},
+"extraKnownMarketplaces": {
+  "life-sciences": { "source": { "source": "github", "repo": "anthropics/life-sciences" } }
+}
 ```
 
-This command installs the default user-scoped Claude Code plugins and
-configures their MCP servers. It is idempotent. `--dry-run` prints the work
-without registering marketplaces, installing plugins, or altering MCP
-configuration.
+To add or remove a plugin, edit that file and `chezmoi apply`. Claude Code reads
+the declaration itself — there is nothing to run.
 
-The default set includes GitHub, PubMed, Synapse, Context7, and Pyright LSP.
-Add `--with bioinformatics` for bioRxiv, Open Targets, ToolUniverse,
-scvi-tools, single-cell-rna-qc, Nextflow Development, and Scientific Problem
-Selection. ToolUniverse must already be available on `PATH` before it can be
-configured.
+| Plugin | Marketplace | Purpose |
+|---|---|---|
+| `github` | `claude-plugins-official` | GitHub repository, issue, and PR access |
+| `pyright-lsp` | `claude-plugins-official` | Python type checking and in-editor diagnostics. Requires `npm install -g pyright`. |
+| `pubmed` | `life-sciences` | PubMed literature search and retrieval |
+| `synapse` | `life-sciences` | Synapse data platform access. Needs `~/.synapseConfig` or `SYNAPSE_AUTH_TOKEN` to authenticate. |
 
-### Included integrations
+Verify what actually loaded with `claude plugin list` and `claude mcp list`.
 
-| Group | Integrations |
-|---|---|
-| Default | GitHub, PubMed, Synapse, Context7, Pyright LSP |
-| `bioinformatics` | bioRxiv, Open Targets, ToolUniverse, scvi-tools, single-cell-rna-qc, Nextflow Development, Scientific Problem Selection |
+### Life-science integrations not enabled here
 
-The 10x Genomics, ChEMBL, and Consensus life-sciences plugins are intentionally
-not installed.
+Available in the `life-sciences` marketplace but deliberately left out:
+`10x-genomics`, `consensus`, `chembl` (claude.ai connector only), `biorxiv`,
+`open-targets`, `scvi-tools`, `single-cell-rna-qc`, `nextflow-development`,
+`scientific-problem-selection`.
+
+Most are reachable as **claude.ai connectors** when signed in at claude.ai —
+PubMed, Synapse, bioRxiv, Open Targets, ChEMBL, and Consensus all auto-sync to
+Claude Code that way, with no local configuration. Enable a plugin version only
+where claude.ai OAuth is unavailable. To enable one, add it to `enabledPlugins`.
+
+### Local MCP servers
+
+None are configured. Two were previously registered by the removed
+`dotfiles claude setup` command, and both are reachable another way:
+
+- **Context7** — documentation lookup; add with
+  `claude mcp add --transport http --scope user context7 https://mcp.context7.com/mcp`
+- **ToolUniverse** — 600+ scientific tools (Harvard Zitnik Lab); needs the
+  `tooluniverse` binary on `PATH` first, then
+  `claude mcp add --transport stdio --scope user tooluniverse -- tooluniverse`
+
+`~/.claude.json` is app-managed. chezmoi owns only the keys it declares in
+`home/modify_private_dot_claude.json`, and leaves everything Claude Code writes
+alone — so MCP servers added with `claude mcp add` survive an apply.
 
 Shared Claude Code and Codex skills are documented in
 [Agent skills](agent-skills.md).
 
 ## Authentication and ephemeral environments
 
-Installation and authentication are separate. Plugins can be installed before
-credentials are available, and `dotfiles doctor` reports outstanding auth
-requirements.
+Configuration and authentication are separate. Plugins can be declared before
+credentials exist; they simply fail to authenticate until supplied.
 
 | Service | Canonical environment variable | Alternative |
 |---|---|---|
@@ -63,12 +88,10 @@ should likewise not be set unless you are operating one.
 
 In a Codespace, Code Ocean capsule, or other ephemeral environment:
 
-1. Install the package.
-2. Run `dotfiles install`.
-3. Run `dotfiles claude setup [--with bioinformatics]` when integrations are needed.
-4. Provide the applicable credentials as environment secrets.
+1. Bootstrap chezmoi — see [Installing and syncing](installing.md).
+2. On Code Ocean, run `dotfiles-sync` so the capsule pass runs too.
+3. Provide the applicable credentials as environment secrets.
 
-Plugin setup is independent of a scientific pipeline and may be omitted from a
-reproducible capsule. Context7, Pyright LSP, basic PubMed access, and bundled
-skills require no token. ToolUniverse authentication depends on the selected
-tools.
+Plugin configuration is independent of a scientific pipeline and may be omitted
+from a reproducible capsule. Pyright LSP, basic PubMed access, and the bundled
+skills require no token.

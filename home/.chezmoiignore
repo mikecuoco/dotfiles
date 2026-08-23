@@ -43,9 +43,9 @@
    capsule is applied as a second pass with its own --destination, selected by
    DOTFILES_CHEZMOI_SCOPE=capsule. See docs/configuration.md.
 
-   Gated on the capsule existing, mirroring install.py's `_capsule.is_dir()`
-   fallback: off-platform this whole block disappears and .claude is managed in
-   $HOME exactly as before.
+   Gated on the capsule existing, mirroring the `[ -d ]` guard in
+   dot_local/bin/executable_dotfiles-sync: off-platform this whole block
+   disappears and .claude is managed in $HOME exactly as before.
 */}}
 {{- $capsule := env "DOTFILES_CAPSULE_DIR" | default "/root/capsule" -}}
 {{- if and (has "codeocean" $layers) (stat $capsule) }}

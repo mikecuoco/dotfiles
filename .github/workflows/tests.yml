@@ -1,0 +1,59 @@
+name: tests
+
+# There is no build here to break, so what CI protects is the render: whether
+# `chezmoi apply` still produces the files each profile promises. Both runners
+# execute the same tests -- the profile is chosen by the fixtures, not detected
+# from the host -- so what the matrix buys is the host itself: BSD userland,
+# Homebrew on PATH, and a case-insensitive filesystem on the macOS leg.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # uv and chezmoi are installed by their official installers rather than
+      # by third-party actions, which is the path README and
+      # run_onchange_before_10-install-brew-packages.sh already document. One
+      # less action to keep pinned, and CI exercises the documented bootstrap.
+      - name: Install uv and chezmoi
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # chezmoi is not optional here: test_chezmoi_render.py skips as a whole
+      # module without it, and five more tests in test_claude_context.py skip
+      # individually, so a runner missing it would report a green pass over the
+      # part of the suite that actually applies a profile.
+      - name: Show versions
+        run: |
+          uv --version
+          chezmoi --version
+
+      # --with ruamel.yaml covers the suite's one optional import
+      # (test_code_ocean_skill.py calls importorskip), so the Code Ocean
+      # dataset-refresher test runs here instead of skipping as it does on a
+      # bare checkout. -ra lists any skip that remains, since a silent skip is
+      # exactly the failure CI exists to surface.
+      - name: Run tests
+        run: uv run --python '>=3.11' --with pytest --with ruamel.yaml pytest -ra

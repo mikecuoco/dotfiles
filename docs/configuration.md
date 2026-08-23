@@ -4,8 +4,8 @@
 
 Profiles inherit configuration from their parents. The layer table lives in
 `home/.chezmoidata/profiles.toml`, and `home/.chezmoiignore` excludes anything
-outside the active profile's layers. The profile can be set with
-`dotfiles install --profile PROFILE`, and is auto-detected only on first run.
+outside the active profile's layers. The profile is chosen once per machine and
+cached; `$DOTFILES_PROFILE` overrides it (see below).
 
 ```text
 common
@@ -16,7 +16,8 @@ common
 │   └── codespace GitHub Codespaces
 ```
 
-Detection uses the first matching signal:
+On first init the prompt is pre-filled with a detected default, computed in
+`home/.chezmoi.toml.tmpl` from the first matching signal:
 
 | Detected by | Profile |
 |---|---|
@@ -26,7 +27,14 @@ Detection uses the first matching signal:
 | Linux | `linux` |
 | macOS | `macos` |
 
-Run `dotfiles profiles` to print the available profiles and inheritance chains.
+The prompt's answer is cached in chezmoi's persistent state, so detection only
+ever decides the *default*. To choose or change the profile explicitly:
+
+```bash
+DOTFILES_PROFILE=cluster chezmoi init && chezmoi apply
+```
+
+Run `chezmoi data` to print the resolved profile and its inherited layers.
 
 ## Installed configuration
 
@@ -71,10 +79,10 @@ of chezmoi's own naming rules rather than being dispatched by hand:
 Composed and merged targets are deliberately regular files, not symlinks: an
 app writing to `~/.codex/config.toml` must not write into the git checkout.
 
-Re-running `dotfiles install` is idempotent — `chezmoi status` is empty
-afterwards, which `dotfiles status` and `dotfiles doctor` both report on.
-There is no installer state file; chezmoi compares its target state against
-the destination directly, so no manifest can drift out of sync with reality.
+Re-running `chezmoi apply` is idempotent — `chezmoi status` is empty
+afterwards. There is no installer state file; chezmoi compares its target state
+against the destination directly, so no manifest can drift out of sync with
+reality.
 
 Destinations that must stay mutable:
 
@@ -132,11 +140,21 @@ to trip over:
   state lock. Scripts derive what they need from `$CHEZMOI_SOURCE_DIR` instead.
 - `promptStringOnce` caches its answer in the persistent state, where neither
   `init --promptString` nor `init --force` can change it. `$DOTFILES_PROFILE` is
-  the supported override and is what `--profile` sets.
+  the supported override.
+- A `run_onchange_` script re-fires when its *rendered* content changes, so its
+  body must not depend on runtime state. Test for a file's existence inside the
+  script at run time, never with `stat` at render time.
+- `.chezmoidata` keys are lowercased on load; declare them lowercase to begin
+  with rather than relying on the mapping.
+- `stat` raises rather than returning false when a path exists but is
+  unreadable, which aborts the whole apply. `home/.chezmoiignore` stats the
+  capsule directory, so a non-root user applying the `codeocean` profile must
+  point `$DOTFILES_CAPSULE_DIR` somewhere readable.
 
 The `cluster` profile assumes no root: see
-[the CLI reference](cli-reference.md#without-root-hpc-login-nodes) for the
-rootless bootstrap, and note that the Python CLI is optional there.
+[Installing and syncing](installing.md#without-root-hpc-login-nodes) for the
+rootless bootstrap. chezmoi is a single static binary, so nothing else is
+needed.
 
 Verify changes with the full suite; `tests/test_chezmoi_render.py` applies every
 profile into a throwaway destination and checks the results and idempotency.
