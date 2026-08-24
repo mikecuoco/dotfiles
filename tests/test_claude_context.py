@@ -49,6 +49,7 @@ CLAUDE_MD = TEMPLATES / "claude-instructions.md"
 CODEX_MD = TEMPLATES / "codex-instructions.md"
 CODEX_SETTINGS = TEMPLATES / "codex-preferences.toml"
 CODEOCEAN_MD = TEMPLATES / "codeocean-preferences.md"
+CLUSTER_MD = TEMPLATES / "cluster-preferences.md"
 GLOBAL_GITIGNORE = SOURCE / "dot_gitignore"
 CODEOCEAN_EXPORTS = SOURCE / "dot_exports.codeocean"
 CLAUDE_SETTINGS = SOURCE / "dot_claude" / "settings.json"
@@ -61,6 +62,10 @@ def _global_text() -> str:
 
 def _codeocean_text() -> str:
     return CODEOCEAN_MD.read_text()
+
+
+def _cluster_text() -> str:
+    return CLUSTER_MD.read_text()
 
 
 def test_repository_agent_instructions_stay_aligned():
@@ -85,6 +90,16 @@ def test_codeocean_overlay_within_budget():
     tokens = estimate_tokens(_codeocean_text())
     assert tokens <= OVERLAY_BUDGET, (
         f"Code Ocean agent overlay is {tokens} estimated tokens "
+        f"(budget: {OVERLAY_BUDGET}). "
+        "Trim it or raise the budget intentionally."
+    )
+
+
+def test_cluster_overlay_within_budget():
+    """HPC cluster overlay must stay within the overlay token budget."""
+    tokens = estimate_tokens(_cluster_text())
+    assert tokens <= OVERLAY_BUDGET, (
+        f"HPC cluster agent overlay is {tokens} estimated tokens "
         f"(budget: {OVERLAY_BUDGET}). "
         "Trim it or raise the budget intentionally."
     )
@@ -277,6 +292,47 @@ def test_non_overlay_profile_omits_codeocean_layer(template):
     content = render(template, "linux")
     assert "Working style" in content
     assert "Code Ocean" not in content
+
+
+@requires_chezmoi
+@pytest.mark.parametrize(
+    "template,agent_heading",
+    [
+        ("dot_claude/CLAUDE.md.tmpl", "Claude delegation"),
+        ("dot_codex/AGENTS.md.tmpl", "Codex delegation"),
+    ],
+)
+def test_cluster_effective_context_contains_shared_and_specific_layers(
+    template, agent_heading
+):
+    """Both agents receive shared, agent-specific, and HPC cluster guidance."""
+    content = render(template, "cluster")
+    assert "Working style" in content
+    assert agent_heading in content
+    assert "HPC Cluster Conventions" in content
+    assert "login node" in content
+
+
+@requires_chezmoi
+@pytest.mark.parametrize(
+    "template", ["dot_claude/CLAUDE.md.tmpl", "dot_codex/AGENTS.md.tmpl"]
+)
+def test_non_overlay_profile_omits_cluster_layer(template):
+    """The cluster overlay is exclusive to the cluster profile."""
+    for profile in ("linux", "macos", "codeocean"):
+        content = render(template, profile)
+        assert "Working style" in content
+        assert "HPC Cluster Conventions" not in content
+
+
+@requires_chezmoi
+@pytest.mark.parametrize(
+    "template", ["dot_claude/CLAUDE.md.tmpl", "dot_codex/AGENTS.md.tmpl"]
+)
+def test_overlays_do_not_bleed_across_profiles(template):
+    """cluster and codeocean are sibling overlays, never composed together."""
+    assert "Code Ocean" not in render(template, "cluster")
+    assert "HPC Cluster Conventions" not in render(template, "codeocean")
 
 
 @requires_chezmoi

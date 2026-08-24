@@ -6,7 +6,7 @@
 - Record enough context to preserve decisions and save expensive outputs rather than recomputing them casually.
 - Consider memory, CPU concurrency, runtime, and input scale before expensive work; prefer bounded or chunked processing where practical.
 - Address risks that could lose work, corrupt provenance, or fill root storage.
-- Do not require end-to-end execution, `conda-lock`, or a finished `run`, and do not prompt for them.
+- Do not require end-to-end execution at this stage.
 
 ## Stabilization
 
@@ -15,7 +15,6 @@
 - Separate immutable inputs, scratch intermediates, and final deliverables.
 - Promote genuinely shared helpers into a package.
 - Continue tracking CPU and memory costs as the workflow grows.
-- Do not lock the environment or develop or invoke `run` unless the user explicitly requests that reproducibility work.
 
 ## Finalization
 

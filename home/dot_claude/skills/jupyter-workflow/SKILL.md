@@ -23,6 +23,25 @@ Keep inexpensive exploration, visualization, diagnostics, and interpretation in 
 2. Move within-project reusable logic into a module or package.
 3. Keep the notebook focused on orchestration, inspection, and explanation.
 
+## Pair with a script when reviewing
+
+`.ipynb` diffs are unreadable. When a notebook is under active review or frequent change, pair it with a `.py` percent-format file using jupytext and edit either side:
+
+```bash
+jupytext --set-formats ipynb,py:percent <name>.ipynb   # pair once
+jupytext --sync <name>.ipynb                           # after editing either side
+```
+
+Commit the paired script when the project uses this workflow; it is what makes review possible.
+
 ## Validate
 
-Before finishing a meaningful notebook change, restart the kernel and run all cells in order. Save results only to the `.out.ipynb` copy and report whether fresh-kernel execution succeeded.
+Before finishing a meaningful notebook change, execute the notebook end to end in a fresh kernel. There is no interactive kernel to restart, so run it headlessly:
+
+```bash
+jupyter nbconvert --execute --to notebook --output <name>.out.ipynb <name>.ipynb
+```
+
+Add `--ExecutePreprocessor.timeout=-1` only when cells are legitimately long-running. Pass `--ExecutePreprocessor.kernel_name=<kernel>` when the notebook must run in a specific environment; if that kernel is unregistered, register it using the `conda-environments` skill rather than falling back to whichever kernel happens to be default.
+
+Write results only to the `.out.ipynb` copy. Report whether fresh-kernel execution succeeded, and name the first failing cell if it did not.

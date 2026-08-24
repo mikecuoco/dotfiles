@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Memory"
+  short_description: "Record durable project facts correctly"
+  default_prompt: "Use $project-memory to record or revise what should be remembered about this repository."

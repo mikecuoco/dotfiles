@@ -1,6 +1,10 @@
 {{- template "agents-preferences.md" . -}}
 {{- "\n\n" -}}
 {{- template "codex-instructions.md" . -}}
+{{- if has "cluster" (index .layers .profile) -}}
+{{- "\n\n" -}}
+{{- template "cluster-preferences.md" . -}}
+{{- end -}}
 {{- if has "codeocean" (index .layers .profile) -}}
 {{- "\n\n" -}}
 {{- template "codeocean-preferences.md" . -}}
