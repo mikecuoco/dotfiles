@@ -1,0 +1,4 @@
+interface:
+  display_name: "SEA-AD S3"
+  short_description: "Route SEA-AD data to the right S3 bucket"
+  default_prompt: "Use $sea-ad-s3 to decide where this SEA-AD data belongs and construct its S3 URI."
