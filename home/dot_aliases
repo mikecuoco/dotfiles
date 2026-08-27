@@ -30,12 +30,6 @@ if command -v eza &>/dev/null; then
     alias ll='eza -la -g --git --group-directories-first'
     alias la='eza -la -g -o --no-permissions --git --group-directories-first'
     alias lsd='eza -D'
-elif command -v exa &>/dev/null; then
-    # exa is unmaintained; eza is the maintained fork — install eza when possible
-    alias ls='exa --group-directories-first'
-    alias ll='exa -la -g --git --group-directories-first'
-    alias la='exa -la -g --git --group-directories-first'
-    alias lsd='exa -D'
 else
     # gls (GNU coreutils via Homebrew on macOS) takes priority over BSD ls
     if command -v gls &>/dev/null; then
