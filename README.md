@@ -9,8 +9,11 @@ static binary — no Python, and no root required.
 ## Quick start
 
 ```bash
-# to install for the first time
-sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply mikecuoco
+# install chemzoi 
+sh -c "$(curl -fsLS https://get.chezmoi.io)"
+
+# init 
+chezmoi init --apply mikecuoco
 
 # to sync with the remote
 chezmoi update
