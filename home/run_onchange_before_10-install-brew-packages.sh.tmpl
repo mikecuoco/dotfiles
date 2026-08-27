@@ -15,6 +15,47 @@ install_zoxide() {
     fi
 }
 
+install_eza() {
+    command -v eza >/dev/null 2>&1 && return 0
+    if command -v brew >/dev/null 2>&1; then
+        echo "==> brew install eza"
+        brew install eza
+        return 0
+    fi
+    # eza publishes no macOS assets, so anything else needs cargo.
+    if [ "$(uname -s)" != "Linux" ]; then
+        if command -v cargo >/dev/null 2>&1; then
+            echo "==> cargo install eza"
+            cargo install eza
+        else
+            echo "==> no brew or cargo for eza; ls/ll/la fall back to GNU ls"
+        fi
+        return 0
+    fi
+    # musl where it exists: statically linked, so it survives the old glibc on
+    # cluster login nodes. aarch64 ships gnu only.
+    case "$(uname -m)" in
+        x86_64|amd64)   _target=x86_64-unknown-linux-musl ;;
+        aarch64|arm64)  _target=aarch64-unknown-linux-gnu ;;
+        *)
+            echo "==> no eza binary for $(uname -m); ls/ll/la fall back to GNU ls"
+            return 0
+            ;;
+    esac
+    echo "==> installing eza via GitHub release (~/.local/bin)"
+    _url="https://github.com/eza-community/eza/releases/latest/download/eza_${_target}.tar.gz"
+    _tmp="$(mktemp -d)"
+    # The tarball holds a single member, ./eza.
+    if curl -fsSL "$_url" | tar -xzf - -C "$_tmp"; then
+        mkdir -p "$HOME/.local/bin"
+        install -m 755 "$_tmp/eza" "$HOME/.local/bin/eza"
+    else
+        echo "==> eza download failed; ls/ll/la fall back to GNU ls"
+    fi
+    rm -rf "$_tmp"
+    unset _target _url _tmp
+}
+
 install_uv() {
     if ! command -v uv >/dev/null 2>&1; then
         if command -v brew >/dev/null 2>&1; then
@@ -96,6 +137,7 @@ if [ -n "${DOTFILES_SKIP_PACKAGE_INSTALL:-}" ]; then
 fi
 
 install_zoxide
+install_eza
 install_uv
 install_node
 install_awscli
