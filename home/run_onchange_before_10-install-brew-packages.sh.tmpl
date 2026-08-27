@@ -32,28 +32,46 @@ install_eza() {
         fi
         return 0
     fi
-    # musl where it exists: statically linked, so it survives the old glibc on
-    # cluster login nodes. aarch64 ships gnu only.
+    # The glibc build first, deliberately: it resolves owners and groups through
+    # NSS, so accounts served by LDAP/SSSD -- every cluster account -- print as
+    # names. The musl asset is static-pie and so cannot load libnss_sss at all;
+    # it sees only /etc/passwd and falls back to numeric UIDs and GIDs. Its one
+    # advantage is not needing glibc, and the gnu asset's floor is 2.18 (2013),
+    # below any machine this runs on, so musl is a last resort rather than the
+    # safe default. aarch64 ships no musl asset either way.
     case "$(uname -m)" in
-        x86_64|amd64)   _target=x86_64-unknown-linux-musl ;;
-        aarch64|arm64)  _target=aarch64-unknown-linux-gnu ;;
+        x86_64|amd64)   _targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl" ;;
+        aarch64|arm64)  _targets="aarch64-unknown-linux-gnu" ;;
         *)
             echo "==> no eza binary for $(uname -m); ls/ll/la fall back to GNU ls"
             return 0
             ;;
     esac
-    echo "==> installing eza via GitHub release (~/.local/bin)"
-    _url="https://github.com/eza-community/eza/releases/latest/download/eza_${_target}.tar.gz"
-    _tmp="$(mktemp -d)"
-    # The tarball holds a single member, ./eza.
-    if curl -fsSL "$_url" | tar -xzf - -C "$_tmp"; then
-        mkdir -p "$HOME/.local/bin"
-        install -m 755 "$_tmp/eza" "$HOME/.local/bin/eza"
-    else
-        echo "==> eza download failed; ls/ll/la fall back to GNU ls"
-    fi
-    rm -rf "$_tmp"
-    unset _target _url _tmp
+    mkdir -p "$HOME/.local/bin"
+    for _target in $_targets; do
+        echo "==> installing eza ($_target) via GitHub release (~/.local/bin)"
+        _url="https://github.com/eza-community/eza/releases/latest/download/eza_${_target}.tar.gz"
+        _tmp="$(mktemp -d)"
+        # The tarball holds a single member, ./eza.
+        if curl -fsSL "$_url" | tar -xzf - -C "$_tmp"; then
+            install -m 755 "$_tmp/eza" "$HOME/.local/bin/eza"
+        fi
+        rm -rf "$_tmp"
+        # A binary needing a newer glibc than the host has installs fine and
+        # then fails to exec, so confirm it runs before accepting it.
+        if "$HOME/.local/bin/eza" --version >/dev/null 2>&1; then
+            case "$_target" in
+                *-musl)
+                    echo "==> note: musl eza cannot read NSS; LDAP owners/groups show as IDs"
+                    ;;
+            esac
+            unset _target _targets _url _tmp
+            return 0
+        fi
+        rm -f "$HOME/.local/bin/eza"
+    done
+    echo "==> eza install failed; ls/ll/la fall back to GNU ls"
+    unset _target _targets _url _tmp
 }
 
 install_uv() {

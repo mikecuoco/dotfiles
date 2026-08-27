@@ -90,6 +90,14 @@ def test_eza_branch_is_selected_and_asks_for_octal_permissions(tmp_path):
     assert "--no-permissions" not in defined["ll"]
 
 
+@pytest.mark.parametrize("alias", ["ls", "ll", "la"])
+def test_eza_shows_owner_and_group_names_not_ids(tmp_path, alias):
+    """eza resolves names by default; -n/--numeric would undo that."""
+    value = _aliases(tmp_path, "eza")[alias]
+    assert "-n" not in value.split()
+    assert "--numeric" not in value.split()
+
+
 def test_fallback_branch_needs_no_eza(tmp_path):
     defined = _aliases(tmp_path)
     assert "eza" not in defined["la"]
@@ -108,8 +116,14 @@ def test_installer_installs_eza():
     assert any(
         line.strip() == "install_eza" for line in body.splitlines()
     ), "install_eza defined but never invoked"
-    # musl on x86_64 survives the old glibc on cluster login nodes; aarch64
-    # has no musl asset published.
     assert "eza_${_target}.tar.gz" in body
-    assert "x86_64-unknown-linux-musl" in body
     assert "aarch64-unknown-linux-gnu" in body
+    # The gnu asset must be tried before the musl one: musl is static-pie, so
+    # it cannot load libnss_sss and prints numeric UIDs/GIDs for the LDAP
+    # accounts the cluster serves. Getting this order wrong is silent -- eza
+    # installs and runs, it just stops naming anyone.
+    gnu, musl = "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"
+    assert gnu in body and musl in body
+    assert body.index(gnu) < body.index(musl), "musl must be the fallback, not the default"
+    # A binary built against a newer glibc installs fine and then fails to exec.
+    assert '"$HOME/.local/bin/eza" --version' in body
