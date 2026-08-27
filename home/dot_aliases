@@ -28,7 +28,7 @@ export CLICOLOR_FORCE=1
 if command -v eza &>/dev/null; then
     alias ls='eza --group-directories-first'
     alias ll='eza -l -gM --group-directories-first'
-    alias la='eza -la -gM --git --group-directories-fllirst'
+    alias la='eza -la -gM --git --group-directories-first'
     alias lsd='eza -D'
 else
     # gls (GNU coreutils via Homebrew on macOS) takes priority over BSD ls
