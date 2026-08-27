@@ -82,4 +82,4 @@ fi
 # ── Local overrides (not in git) ──────────────────────────────────────────────
 [ -f "$HOME/.extra" ] && source "$HOME/.extra"
 
-. "$HOME/.local/bin/env"
+[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"

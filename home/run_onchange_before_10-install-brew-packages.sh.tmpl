@@ -16,13 +16,27 @@ install_zoxide() {
 }
 
 install_uv() {
-    command -v uv >/dev/null 2>&1 && return 0
-    if command -v brew >/dev/null 2>&1; then
-        echo "==> brew install uv"
-        brew install uv
-    else
-        echo "==> installing uv via official installer (~/.local/bin)"
-        curl -LsSf https://astral.sh/uv/install.sh | sh
+    if ! command -v uv >/dev/null 2>&1; then
+        if command -v brew >/dev/null 2>&1; then
+            echo "==> brew install uv"
+            brew install uv
+        else
+            echo "==> installing uv via official installer (~/.local/bin)"
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+        fi
+    fi
+    # Ensure the PATH env-setup script exists for non-Homebrew installs.
+    # The curl installer writes it; installs via other means (conda, modules,
+    # manual copy) do not.
+    if ! command -v brew >/dev/null 2>&1 && [ ! -f "$HOME/.local/bin/env" ]; then
+        echo "==> creating ~/.local/bin/env"
+        cat > "$HOME/.local/bin/env" << 'ENVEOF'
+#!/bin/sh
+case ":${PATH}:" in
+    *:"$HOME/.local/bin":*) ;;
+    *) export PATH="$HOME/.local/bin:${PATH}" ;;
+esac
+ENVEOF
     fi
 }
 
