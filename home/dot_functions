@@ -18,7 +18,7 @@ f() {
 
 # List all files, long format, with octal permissions
 la() {
-    ls -l "$@" | awk '
+    TIME_STYLE='+%b %e %H:%M' ls -l "$@" | awk '
     {
       k=0
       for (i=0;i<=8;i++)
