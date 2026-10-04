@@ -24,6 +24,7 @@ has one destination rather than two.
 
 | Skill | Use |
 |---|---|
+| `beaker-gpu-jobs` | Submitting and monitoring Allen AI Hub (Beaker) GPU jobs from the HPC |
 | `brisc` | Large-scale scRNA-seq processing with brisc |
 | `code-ocean-capsule` | Organizing and reviewing Code Ocean capsules |
 | `conda-environments` | Creating and maintaining conda/mamba environments |

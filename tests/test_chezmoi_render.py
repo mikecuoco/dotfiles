@@ -141,8 +141,9 @@ def test_linux_overlay_is_sourced_exactly_for_linux_profiles(applied):
     assert sourced == (0 if profile == "macos" else 1), profile
 
 
-BUNDLED_SKILLS = ("brisc", "code-ocean-capsule", "conda-environments",
-                  "jupyter-workflow", "project-memory", "sea-ad-s3")
+BUNDLED_SKILLS = ("beaker-gpu-jobs", "brisc", "code-ocean-capsule",
+                  "conda-environments", "jupyter-workflow", "project-memory",
+                  "sea-ad-s3")
 
 
 def test_bundled_skills_are_installed_by_apply(applied):

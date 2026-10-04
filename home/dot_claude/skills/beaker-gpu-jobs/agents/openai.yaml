@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beaker GPU Jobs"
+  short_description: "Submit and monitor Beaker GPU jobs from the HPC"
+  default_prompt: "Use $beaker-gpu-jobs to upload this project's code as a Beaker dataset, write a reviewed experiment spec, submit a GPU job, and fetch its results."
