@@ -1,8 +1,9 @@
 #!/bin/sh
 # Validate a repository's shared project memories under .agents/memory/.
 #
-# Referenced by the generated ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, so it
-# has to stay agent-agnostic: plain POSIX sh, no Python, no tool-specific flags.
+# Referenced by the shared project-memory skill, which both Claude Code and Codex
+# load, so it has to stay agent-agnostic: plain POSIX sh, no Python, no
+# tool-specific flags.
 #
 # Usage: agents-memory-check [repo]        (default: the enclosing Git repo)
 #

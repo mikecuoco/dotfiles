@@ -52,7 +52,7 @@ CODEOCEAN_MD = TEMPLATES / "codeocean-preferences.md"
 CLUSTER_MD = TEMPLATES / "cluster-preferences.md"
 GLOBAL_GITIGNORE = SOURCE / "dot_gitignore"
 CODEOCEAN_EXPORTS = SOURCE / "dot_exports.codeocean"
-CLAUDE_SETTINGS = SOURCE / "dot_claude" / "settings.json"
+CLAUDE_SETTINGS = SOURCE / ".chezmoitemplates" / "claude-settings.json"
 CODEOCEAN_GLOBAL = SOURCE / "modify_private_dot_claude.json"
 
 

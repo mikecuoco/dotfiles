@@ -16,8 +16,12 @@ export HISTFILESIZE=$HISTSIZE
 export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
 type shopt &>/dev/null && shopt -s histappend cmdhist
 
-# Sync history across terminal sessions in real-time
-export PROMPT_COMMAND="history -a; history -c; history -r; ${PROMPT_COMMAND:-}"
+# Append each command to the history file as soon as it runs. Not exported, and
+# guarded, so nested shells do not stack copies.
+case "${PROMPT_COMMAND:-}" in
+    *"history -a"*) ;;
+    *) PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
+esac
 
 # Better globbing and cd
 type shopt &>/dev/null && shopt -s nocaseglob cdspell globstar 2>/dev/null
@@ -40,13 +44,19 @@ unset _df_file
 # ── Platform overlay ───────────────────────────────────────────────────────────
 # chezmoi writes the active profile name to ~/.config/dotfiles/profile
 # and installs overlay files as ~/.exports.<profile>, ~/.aliases.<profile>, etc.
+# cluster, codeocean and codespace build on the linux layer, whose overlay
+# chezmoi installs only for those profiles, so it is loaded first when present.
 _DF_PROFILE="${DOTFILES_PROFILE:-$(cat "$HOME/.config/dotfiles/profile" 2>/dev/null)}"
-if [ -n "$_DF_PROFILE" ]; then
-    for _df_file in "$HOME"/.{exports,aliases,functions}."$_DF_PROFILE"; do
+_df_layers="$_DF_PROFILE"
+if [ -n "$_DF_PROFILE" ] && [ "$_DF_PROFILE" != linux ] && [ -r "$HOME/.exports.linux" ]; then
+    _df_layers="linux $_DF_PROFILE"
+fi
+for _df_layer in $_df_layers; do
+    for _df_file in "$HOME"/.{exports,aliases,functions}."$_df_layer"; do
         [ -r "$_df_file" ] && source "$_df_file"
     done
-fi
-unset _DF_PROFILE _df_file
+done
+unset _DF_PROFILE _df_layers _df_layer _df_file
 
 # ── Node.js (fnm) ─────────────────────────────────────────────────────────────
 if command -v fnm >/dev/null 2>&1; then
@@ -61,18 +71,8 @@ elif [ -f "$HOME/.z.sh" ]; then
 fi
 
 # ── Bash completion ───────────────────────────────────────────────────────────
-if [[ -n "$ZSH_VERSION" ]]; then   # bail out if running under zsh
-    return 1 2>/dev/null || exit 1
-fi
-[ -f /etc/bash_completion ] && source /etc/bash_completion
-# Download git-completion on first use if missing
-if [ ! -f "$HOME/.git-completion.bash" ]; then
-    _gc_url="https://raw.githubusercontent.com/git/git/HEAD/contrib/completion/git-completion.bash"
-    if command -v curl &>/dev/null; then
-        curl -fsSL "$_gc_url" -o "$HOME/.git-completion.bash" 2>/dev/null || true
-    fi
-    unset _gc_url
-fi
+# The bash-completion framework itself is loaded by the platform overlay.
+command -v gh &>/dev/null && eval "$(gh completion -s bash)" 2>/dev/null
 [ -f "$HOME/.git-completion.bash" ] && source "$HOME/.git-completion.bash"
 # Enable `g` alias tab-completion (same as git)
 if type __git_complete &>/dev/null; then

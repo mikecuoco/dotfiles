@@ -6,4 +6,3 @@
 # Machine-local non-interactive additions (e.g. nvm, rvm, conda injections)
 [ -f "$HOME/.extrarc" ] && source "$HOME/.extrarc"
 
-. "$HOME/.local/bin/env"

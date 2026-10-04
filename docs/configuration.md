@@ -44,10 +44,10 @@ Every profile installs the following common configuration:
 |---|---|
 | Shell | `.bashrc`, `.bash_profile`, `.bash_prompt`, `.aliases`, `.exports`, `.functions`, `.inputrc` |
 | Git | `.gitconfig`, `.gitignore`, `.gitattributes` |
-| Editor | `.vimrc`, `.vim/` |
+| Editor | `.vimrc` |
 | Conda | `.condarc` |
 | Misc | `.dircolors`, `.gemrc`, `.hushlogin` |
-| Claude Code | `.claude/CLAUDE.md`, `.claude/settings.json` |
+| Claude Code | `.claude/CLAUDE.md`, managed keys merged into `.claude/settings.json` |
 | Codex | `.codex/AGENTS.md`, a managed preference block in `.codex/config.toml` |
 
 Profile overlays add the following paths:
@@ -86,6 +86,10 @@ reality.
 
 Destinations that must stay mutable:
 
+- `~/.claude/settings.json` — Claude Code writes this file itself (`/model`,
+  `/config`, `/permissions`, `/plugin`). The owned values in
+  `home/.chezmoitemplates/claude-settings.json` are deep-merged over it and win
+  on every apply; any other key Claude writes is kept.
 - `~/.claude.json` — the managed Code Ocean defaults are set by path, leaving
   account and runtime state untouched.
 - `~/.codex/config.toml` — a marker-delimited `dotfiles` block is merged in
@@ -99,19 +103,6 @@ copies any unmanaged file that is about to be replaced to
 `<name>.dotfiles-backup.<UTC timestamp>`. chezmoi otherwise overwrites
 silently. Only leaf targets are considered, so directories such as `~/.config`
 are never copied wholesale.
-
-### Two known deviations
-
-`~/.vim` becomes a real directory of per-file symlinks rather than a single
-directory symlink. This is deliberate: under the old scheme vim wrote its
-runtime state (`viminfo`, `.VimballRecord`, `plugged/`) straight into the git
-repository. Tracked config still resolves back to the repo, while runtime state
-stays local.
-
-Profile-specific git credential helpers are written to `~/.gitconfig.profile`
-and pulled in by an `[include]` in the managed `~/.gitconfig`. The previous
-installer ran `git config --global`, which — because `~/.gitconfig` is a
-symlink into the repository — wrote its output into the tracked source file.
 
 ## Agent configuration
 

@@ -40,6 +40,6 @@ package-lock.json
 /.claude/worktrees/
 /.claude/settings.local.json
 
-# Written by `git config --global` while $HOME pointed here; the managed
-# credential config now lives in ~/.gitconfig.profile instead.
+# Written by `git config --global` while $HOME pointed here. Machine-local git
+# settings belong in ~/.gitconfig.local, which the managed ~/.gitconfig includes.
 /.gitconfig

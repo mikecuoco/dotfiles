@@ -6,6 +6,11 @@
    setValueAtPath states exactly which keys we own, rather than deep-merging an
    opaque overlay -- unrelated keys written by Claude Code are passed through.
    The private_ prefix reproduces the old installer's 0600 mode for new files.
+
+   hasCompletedOnboarding is not a documented setting; it is the key Claude Code
+   itself writes after first-run onboarding, and setting it is the only way to
+   skip that prompt in a headless Code Ocean container. Recheck it if onboarding
+   reappears after a Claude Code upgrade.
 */ -}}
 {{- $cfg := dict -}}
 {{- if .chezmoi.stdin -}}

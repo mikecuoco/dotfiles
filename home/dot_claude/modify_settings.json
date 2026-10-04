@@ -1,0 +1,16 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /*
+   Merge dotfiles-owned settings into ~/.claude/settings.json.
+
+   Claude Code writes this file itself (/model, /config, /permissions, /plugin),
+   so it cannot be a symlink into the source tree: those writes would land in
+   git. The owned values live in .chezmoitemplates/claude-settings.json and win
+   on every apply; mergeOverwrite deep-merges them, so keys Claude adds --
+   including entries nested beside ours, like permissions.allow -- pass through.
+*/ -}}
+{{- $cfg := dict -}}
+{{- if trim .chezmoi.stdin -}}
+{{-   $cfg = fromJson .chezmoi.stdin -}}
+{{- end -}}
+{{- $owned := includeTemplate "claude-settings.json" . | fromJson -}}
+{{- mergeOverwrite $cfg $owned | toPrettyJson -}}

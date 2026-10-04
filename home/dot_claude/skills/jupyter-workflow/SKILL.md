@@ -74,8 +74,6 @@ Check that the executed copy has zero cells with `output_type == "error"`. Repor
 
 ## Figures
 
-Follow the `scientific-plotting` skill for style, sizing, and color. In the notebook:
-
 - Apply one style cell near the top and define one canonical color mapping once.
 - Save through a single `save_fig(fig, "NN_name")` helper that writes PNG and PDF into the run's `figures/`; number files to match section numbers.
 - Put a Markdown cell before each figure stating the question and how to read it.

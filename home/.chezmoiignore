@@ -1,4 +1,7 @@
 {{/* Exclude every target that is not part of the active profile's layers. */}}
+{{- if not (hasKey .layers .profile) -}}
+{{-   fail (printf "unknown dotfiles profile %q; expected one of: %s" .profile (keys .layers | sortAlpha | join ", ")) -}}
+{{- end -}}
 {{- $layers := index .layers .profile -}}
 
 {{- if not (has "macos" $layers) }}

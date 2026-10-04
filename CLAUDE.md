@@ -2,7 +2,8 @@
 
 - Dotfiles live under `home/` and are installed by chezmoi, including agent
   skills (`home/dot_claude/skills/`) and the managed helper commands in
-  `home/dot_local/bin/`. There is no Python package; `tests/` is the only Python.
+  `home/dot_local/bin/`. There is no Python package; besides `tests/`, the only
+  Python is skill helper scripts under `home/dot_claude/skills/*/scripts/`.
 - Treat files under user home directories as installed output. Change the
   source under `home/` rather than editing installed copies.
 - Preserve app-managed Claude and Codex configuration outside the dotfiles

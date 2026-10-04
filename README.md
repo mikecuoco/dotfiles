@@ -9,10 +9,10 @@ static binary — no Python, and no root required.
 ## Quick start
 
 ```bash
-# install chemzoi 
+# install chezmoi
 sh -c "$(curl -fsLS https://get.chezmoi.io)"
 
-# init 
+# init
 chezmoi init --apply mikecuoco
 
 # to sync with the remote

@@ -8,7 +8,7 @@ fix was to stop parsing `ls` and let eza lay out its own columns.
 
 What is asserted here is therefore the invariant that replaced the function:
 each branch of the tier in `home/dot_aliases` defines all three aliases, and the
-eza branch asks for octal permissions. The aliases are read back out of a real
+eza branch keeps owner and group names. The aliases are read back out of a real
 bash that sourced the file, with `PATH` pinned to a stub directory, so the test
 exercises the branch selection rather than grepping for text -- and it does not
 depend on whether eza happens to be installed on the machine running pytest.
@@ -79,15 +79,13 @@ def test_every_branch_defines_the_full_ls_tier(tmp_path, stub):
         assert name in defined, f"{name} undefined with stub={stub!r}"
 
 
-def test_eza_branch_is_selected_and_asks_for_octal_permissions(tmp_path):
+def test_eza_branch_is_selected_and_la_adds_hidden_and_git(tmp_path):
     defined = _aliases(tmp_path, "eza")
     assert defined["la"].startswith("eza ")
-    # -o/--octal-permissions replacing the symbolic string is the whole point of
-    # `la`; without --no-permissions eza prints both columns.
-    assert "-o" in defined["la"].split()
-    assert "--no-permissions" in defined["la"].split()
-    # `ll` keeps the symbolic string, so the two aliases stay distinguishable.
-    assert "--no-permissions" not in defined["ll"]
+    # `la` is `ll` plus dotfiles and git status, so the two stay distinguishable.
+    assert "-la" in defined["la"].split()
+    assert "--git" in defined["la"].split()
+    assert "--git" not in defined["ll"].split()
 
 
 @pytest.mark.parametrize("alias", ["ls", "ll", "la"])
@@ -114,7 +112,8 @@ def test_installer_installs_eza():
     assert "install_eza()" in body, "helper missing"
     # Defining it without calling it is the easy way to get this wrong.
     assert any(
-        line.strip() == "install_eza" for line in body.splitlines()
+        line.strip().startswith("for _install in") and "install_eza" in line.split()
+        for line in body.splitlines()
     ), "install_eza defined but never invoked"
     assert "eza_${_target}.tar.gz" in body
     assert "aarch64-unknown-linux-gnu" in body

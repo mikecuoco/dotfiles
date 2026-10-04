@@ -20,12 +20,24 @@ same tree. The two used to be independent copies kept in step by the installer;
 linking them removes the possibility of drift and means anything writing skills
 has one destination rather than two.
 
+## Bundled skills
+
+| Skill | Use |
+|---|---|
+| `brisc` | Large-scale scRNA-seq processing with brisc |
+| `code-ocean-capsule` | Organizing and reviewing Code Ocean capsules |
+| `conda-environments` | Creating and maintaining conda/mamba environments |
+| `jupyter-workflow` | Reproducible notebook authoring, execution and review |
+| `project-memory` | Shared `.agents/memory/` project discoveries |
+| `sea-ad-s3` | SEA-AD S3 bucket routing, paths and tags |
+
 ## Adding a skill
 
 Create a directory under `home/dot_claude/skills/` and re-run `chezmoi apply`.
 
 `tests/test_agent_skills.py` validates every shipped `SKILL.md`: the frontmatter
-must parse, and its `name` must match the directory — a mismatch stops both
+must parse and hold only `name` and `description`, `SKILL.md` must stay under
+500 lines, relative links must resolve, and its `name` must match the directory — a mismatch stops both
 Claude Code and Codex loading the skill, silently. Run
 `uv run --python '>=3.11' --with pytest pytest -k skill` after adding one.
 

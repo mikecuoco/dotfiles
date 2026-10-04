@@ -10,7 +10,8 @@
       "Read(~/.extra)",
       "Read(~/.extrarc)",
       "Read(~/.aws/credentials)",
-      "Read(~/.claude/.credentials.json)"
+      "Read(~/.claude/.credentials.json)",
+      "Read(~/.codex/auth.json)"
     ]
   },
   "enabledPlugins": {

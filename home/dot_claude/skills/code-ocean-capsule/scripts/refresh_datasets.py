@@ -96,7 +96,11 @@ def extract_attachments(document: Any) -> list[Attachment]:
 
     def visit(node: Any) -> None:
         if isinstance(node, Mapping):
+            # Only a UUID counts: unrelated objects in datasets.json also carry
+            # an `id` or `name`, and must not become phantom attachments.
             explicit_id = _first_text(node, ID_KEYS)
+            if explicit_id and not _looks_like_asset_id(explicit_id.strip()):
+                explicit_id = None
             if explicit_id:
                 remember(
                     explicit_id,
@@ -435,7 +439,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         markdown_path = args.markdown or code_dir / "DATASETS.md"
         attachments = extract_attachments(_load_json(datasets_json))
         if not attachments:
-            print(f"warning: no attached Data Asset IDs found in {datasets_json}", file=sys.stderr)
+            # An unrecognized datasets.json shape parses to nothing; writing
+            # anyway would mark every existing manifest entry detached.
+            print(
+                f"error: no attached Data Asset IDs found in {datasets_json}; "
+                "manifest left unchanged",
+                file=sys.stderr,
+            )
+            return 1
 
         metadata_by_id: dict[str, Mapping[str, Any]] = {}
         warnings: list[str] = []

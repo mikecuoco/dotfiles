@@ -23,14 +23,15 @@ elif command -v dircolors &>/dev/null; then
 fi
 
 # ── PATH additions ────────────────────────────────────────────────────────────
-# Add personal bin directories if they exist
-for _d in "$HOME/bin" "$HOME/.local/bin" "$HOME/code/bin"; do
-    [ -d "$_d" ] && export PATH="$_d:$PATH"
+# Add personal bin directories if they exist. Skip ones already on PATH so
+# nested shells do not keep prepending duplicates.
+for _d in "$HOME/.cargo/bin" "$HOME/code/bin" "$HOME/.local/bin" "$HOME/bin"; do
+    case ":$PATH:" in
+        *":$_d:"*) ;;
+        *) [ -d "$_d" ] && export PATH="$_d:$PATH" ;;
+    esac
 done
 unset _d
-
-# Cargo / Rust
-[ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
 # Subscription OAuth (CLAUDE_CODE_OAUTH_TOKEN) is the preferred auth method.

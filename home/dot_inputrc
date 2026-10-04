@@ -38,5 +38,5 @@ set input-meta on
 set output-meta on
 set convert-meta off
 
-# Alt/Meta + Delete → kill preceding word
+# Alt/Meta + forward Delete → kill the next word
 "\e[3;3~": kill-word

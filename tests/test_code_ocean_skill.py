@@ -79,6 +79,23 @@ def test_checker_treats_missing_final_artifacts_as_exploratory_info(tmp_path):
     assert any(item["code"] == "missing-run" and item["severity"] == "info" for item in report["findings"])
 
 
+def test_checker_ignores_package_and_test_dirs_when_inferring_stage(tmp_path):
+    """A src/ or tests/ skeleton alone is not evidence of stabilized scripts."""
+    for name in ("src", "tests"):
+        directory = tmp_path / "code" / name
+        directory.mkdir(parents=True)
+        (directory / "module.py").write_text("", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(CHECKER), "--root", str(tmp_path), "--format", "json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert json.loads(result.stdout)["stage"] == "exploration"
+
+
 def test_checker_enforces_finalization_requirements(tmp_path):
     arm = tmp_path / "code" / "preprocessing"
     arm.mkdir(parents=True)
@@ -136,6 +153,16 @@ def test_attachment_parser_accepts_list_and_uuid_mapping(monkeypatch):
     assert by_id[first].mount == "/data/rna"
     assert by_id[first].name == "RNA"
     assert by_id[second].mount == "/data/pathology"
+
+
+def test_attachment_parser_ignores_non_uuid_ids(monkeypatch):
+    """Unrelated objects with an `id` must not become phantom datasets."""
+    module = _load_refresher(monkeypatch)
+    asset = "01234567-89ab-cdef-0123-456789abcdef"
+    attachments = module.extract_attachments(
+        {"capsule": {"id": "capsule-7", "name": "mine"}, "datasets": [{"id": asset}]}
+    )
+    assert [item.asset_id for item in attachments] == [asset]
 
 
 def test_manifest_merge_preserves_manual_fields_and_marks_detached(monkeypatch):
