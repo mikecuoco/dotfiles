@@ -23,12 +23,10 @@ camerausedby() {
 
 # Show local IP addresses for all network interfaces
 localip() {
-    local purple="\x1B[35m" reset="\x1B[m"
-    networksetup -listallhardwareports | \
-        sed -E "s/Hardware Port: (.*)/${purple}\1${reset}/g" | \
-        sed -E "s/Device: (en.*)$/ipconfig getifaddr \1/e" | \
-        sed -E "s/Ethernet Address:/📘 /g" | \
-        sed -E "s/(VLAN Configurations)|=+//g"
+    local dev addr
+    for dev in $(networksetup -listallhardwareports | awk '/^Device:/ {print $2}'); do
+        addr="$(ipconfig getifaddr "$dev" 2>/dev/null)" && echo "$dev $addr"
+    done
 }
 
 # ── Media conversion ─────────────────────────────────────────────────────────
@@ -50,13 +48,6 @@ gifify() {
         ffmpeg -i "$1" -s 600x400 -pix_fmt rgb24 -r 10 -f gif - | \
             gifsicle --optimize=3 --delay=3 > "$1.gif"
     fi
-}
-
-# Convert a video to WebM
-# Requires: ffmpeg with libvpx + libvorbis
-webmify() {
-    ffmpeg -i "$1" -vcodec libvpx -acodec libvorbis -isync -copyts \
-        -aq 80 -threads 3 -qmax 30 -y "$2" "$1.webm"
 }
 
 # ── Shell management ──────────────────────────────────────────────────────────

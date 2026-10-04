@@ -93,6 +93,8 @@ def infer_stage(code_dir: Path, environment_dir: Path) -> str:
         path.suffix in {".py", ".r", ".R", ".jl", ".sh"}
         for directory in code_dir.iterdir()
         if directory.is_dir()
+        and directory.name not in IGNORED_DIRS
+        and not directory.name.startswith(".")
         for path in directory.iterdir()
         if path.is_file()
     )

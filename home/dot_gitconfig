@@ -10,7 +10,6 @@
 	df = diff --color --color-words --abbrev
 	lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --
 	cherrypick = cherry-pick
-	cherry = cherry-pick
 	cp = cherry-pick
 
 	# Show diff from the merge-base with the default upstream branch
@@ -34,20 +33,6 @@
 	excludesfile = ~/.gitignore
 	attributesfile = ~/.gitattributes
 	precomposeUnicode = true
-
-[pager]
-	# git-delta provides beautiful diffs: https://github.com/dandavison/delta
-	diff = delta
-	show = delta
-
-[delta]
-	max-line-length = 700
-	max-line-distance = 0.3
-	syntax-theme = base16
-	file-decoration-style = yellow ol ul
-	file-style = bold yellow ul
-	hunk-header-decoration-style = blue
-	hunk-header-line-number-style = purple bold
 
 [color]
 	ui = auto
@@ -106,12 +91,6 @@
 [log]
 	# ISO 8601 format shows absolute timestamps alongside relative ones
 	date = iso
-
-[filter "lfs"]
-	clean = git-lfs clean -- %f
-	smudge = git-lfs smudge -- %f
-	process = git-lfs filter-process
-	required = true
 
 # ── Credential helpers ───────────────────────────────────────────────────────
 [credential "https://github.com"]

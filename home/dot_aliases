@@ -34,7 +34,7 @@ else
     # gls (GNU coreutils via Homebrew on macOS) takes priority over BSD ls
     if command -v gls &>/dev/null; then
         alias ls='gls -AFh --color=auto --group-directories-first'
-    elif ls --color &>/dev/null 2>&1; then
+    elif ls --group-directories-first -d . &>/dev/null; then
         alias ls='ls -AFh --color=auto --group-directories-first'
     else
         alias ls='ls -AFhG'   # BSD (macOS without coreutils)
@@ -69,9 +69,6 @@ alias v="vim"
 alias ungz="gunzip -k"
 alias ag='ag -f --hidden'
 alias where=which
-
-# ── Networking ────────────────────────────────────────────────────────────────
-alias ip="dig +short myip.opendns.com @resolver1.opendns.com"
 
 # ── Housekeeping ──────────────────────────────────────────────────────────────
 alias cleanup_dsstore="find . -name '*.DS_Store' -type f -ls -delete"

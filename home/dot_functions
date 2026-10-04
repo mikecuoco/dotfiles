@@ -97,8 +97,8 @@ server() {
 
 # ── Git utilities ─────────────────────────────────────────────────────────────
 
-# Interactive git log browser (requires fzf)
-log() {
+# Interactive git log browser (requires fzf). Not `log`, which is a macOS command.
+glog() {
     git log --graph --color=always \
         --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" | \
     fzf --ansi --no-sort --reverse --tiebreak=index --toggle-sort=\` \
@@ -139,18 +139,3 @@ cond() {
     unset _exe _root
 }
 
-# ── Safe PATH manipulation ────────────────────────────────────────────────────
-
-# Prepend a directory to PATH (no-op if already present)
-_path_prepend() {
-    case ":${PATH}:" in
-        *:"$1":*) ;;
-        *) export PATH="$1:$PATH" ;;
-    esac
-}
-
-# Remove a directory from PATH
-_path_del() {
-    PATH="$(printf '%s' "$PATH" | awk -v RS=: -v ORS=: -v d="$1" '$0 != d' | sed 's/:$//')"
-    export PATH
-}

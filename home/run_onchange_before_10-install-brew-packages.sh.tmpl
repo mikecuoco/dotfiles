@@ -4,6 +4,19 @@
 # so adding a package here ensures it gets installed on next apply.
 set -eu
 
+# Download an installer to a file before running it. In `curl | sh` a failed
+# download hands sh an empty script, which exits 0 and hides the failure.
+# Usage: fetch_run <shell> <url> [installer args...]
+fetch_run() {
+    _shell="$1" _url="$2"
+    shift 2
+    _script="$(mktemp)"
+    _rc=0
+    curl -fsSL "$_url" -o "$_script" && "$_shell" "$_script" "$@" || _rc=$?
+    rm -f "$_script"
+    return "$_rc"
+}
+
 install_zoxide() {
     command -v zoxide >/dev/null 2>&1 && return 0
     if command -v brew >/dev/null 2>&1; then
@@ -11,7 +24,7 @@ install_zoxide() {
         brew install zoxide
     else
         echo "==> installing zoxide via official installer (~/.local/bin)"
-        curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+        fetch_run sh https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh
     fi
 }
 
@@ -81,7 +94,7 @@ install_uv() {
             brew install uv
         else
             echo "==> installing uv via official installer (~/.local/bin)"
-            curl -LsSf https://astral.sh/uv/install.sh | sh
+            fetch_run sh https://astral.sh/uv/install.sh
         fi
     fi
     # Ensure the PATH env-setup script exists for non-Homebrew installs.
@@ -89,6 +102,7 @@ install_uv() {
     # manual copy) do not.
     if ! command -v brew >/dev/null 2>&1 && [ ! -f "$HOME/.local/bin/env" ]; then
         echo "==> creating ~/.local/bin/env"
+        mkdir -p "$HOME/.local/bin"
         cat > "$HOME/.local/bin/env" << 'ENVEOF'
 #!/bin/sh
 case ":${PATH}:" in
@@ -106,11 +120,10 @@ install_node() {
         brew install node
     else
         echo "==> installing node via fnm (~/.local/bin)"
-        curl -fsSL https://fnm.vercel.app/install | bash -s -- \
-            --install-dir "$HOME/.local/bin" --skip-shell
-        "$HOME/.local/bin/fnm" install --lts
-        "$HOME/.local/bin/fnm" default lts-latest
-        eval "$("$HOME/.local/bin/fnm" env)"
+        fetch_run bash https://fnm.vercel.app/install \
+            --install-dir "$HOME/.local/bin" --skip-shell &&
+            "$HOME/.local/bin/fnm" install --lts &&
+            "$HOME/.local/bin/fnm" default lts-latest
     fi
 }
 
@@ -120,14 +133,22 @@ install_awscli() {
         echo "==> brew install awscli"
         brew install awscli
     else
+        # The official zip is Linux-only and needs unzip.
+        if [ "$(uname -s)" != "Linux" ] || ! command -v unzip >/dev/null 2>&1; then
+            echo "==> no brew, or not Linux with unzip; skipping awscli"
+            return 0
+        fi
         echo "==> installing awscli via official installer (~/.local/bin)"
-        _arch="$(uname -m)"
-        _url="https://awscli.amazonaws.com/awscli-exe-linux-${_arch}.zip"
-        curl -fsSL "$_url" -o /tmp/awscliv2.zip
-        unzip -q /tmp/awscliv2.zip -d /tmp/awscliv2
-        /tmp/awscliv2/aws/install --install-dir "$HOME/.local/aws-cli" --bin-dir "$HOME/.local/bin"
-        rm -rf /tmp/awscliv2.zip /tmp/awscliv2
-        unset _arch _url
+        _url="https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
+        _tmp="$(mktemp -d)"
+        _rc=0
+        curl -fsSL "$_url" -o "$_tmp/awscliv2.zip" &&
+            unzip -q "$_tmp/awscliv2.zip" -d "$_tmp" &&
+            "$_tmp/aws/install" --install-dir "$HOME/.local/aws-cli" --bin-dir "$HOME/.local/bin" ||
+            _rc=$?
+        rm -rf "$_tmp"
+        unset _url _tmp
+        return "$_rc"
     fi
 }
 
@@ -139,7 +160,7 @@ install_claude_code() {
         brew install --cask claude-code
     else
         echo "==> installing claude-code via native installer (~/.local/bin)"
-        curl -fsSL https://claude.ai/install.sh | bash
+        fetch_run bash https://claude.ai/install.sh
     fi
 }
 
@@ -154,9 +175,8 @@ if [ -n "${DOTFILES_SKIP_PACKAGE_INSTALL:-}" ]; then
     exit 0
 fi
 
-install_zoxide
-install_eza
-install_uv
-install_node
-install_awscli
-install_claude_code
+# One failed install must not abort `chezmoi apply`: this is a before_ script,
+# so a non-zero exit would stop the dotfiles themselves from being written.
+for _install in install_zoxide install_eza install_uv install_node install_awscli install_claude_code; do
+    "$_install" || echo "==> $_install failed; continuing" >&2
+done

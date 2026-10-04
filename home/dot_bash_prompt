@@ -4,10 +4,6 @@
 # Bail out immediately if running under zsh
 [[ -n "$ZSH_VERSION" ]] && { return 1 2>/dev/null || exit 1; }
 
-# Suppress user@host when logged in as the "expected" user on a known machine.
-# Set DOTFILES_USER in ~/.extra to override (default: current user).
-DOTFILES_USER="${DOTFILES_USER:-$(id -un)}"
-
 # Trim prompt to last 2 path components (requires Bash 4.x)
 PROMPT_DIRTRIM=2
 
@@ -39,7 +35,7 @@ _set_prompts() {
         white="\e[1;37m";  yellow="\e[1;33m"
     fi
 
-    # user@host — only shown when $USER != $DOTFILES_USER (i.e. on a foreign machine)
+    # user@host, red when root
     _usernamehost() {
         local style="${magenta}"
         [[ "$USER" == *root* ]] && style="${red}"
@@ -66,7 +62,7 @@ _set_prompts() {
     # ── Prompt string ──────────────────────────────────────────────────────
     PS1="\[\033]0;\w\007\]"                    # terminal title = cwd
     PS1+="\n\[${bold}\]"
-    PS1+="\[$(_usernamehost)\]"                # user@host (hidden when $USER == $DOTFILES_USER)
+    PS1+="$(_usernamehost)"                    # user@host; escapes are wrapped inside
     PS1+="\[${green}\]\w"                      # working directory
     PS1+="\$(_prompt_git \"\[${white}\] on \[${purple}\]\" \"\[${cyan}\]\")"
     PS1+="\n"

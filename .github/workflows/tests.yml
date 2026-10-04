@@ -42,7 +42,7 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       # chezmoi is not optional here: test_chezmoi_render.py skips as a whole
-      # module without it, and five more tests in test_claude_context.py skip
+      # module without it, and more tests in test_claude_context.py skip
       # individually, so a runner missing it would report a green pass over the
       # part of the suite that actually applies a profile.
       - name: Show versions
@@ -53,7 +53,14 @@ jobs:
       # --with ruamel.yaml covers the suite's one optional import
       # (test_code_ocean_skill.py calls importorskip), so the Code Ocean
       # dataset-refresher test runs here instead of skipping as it does on a
-      # bare checkout. -ra lists any skip that remains, since a silent skip is
-      # exactly the failure CI exists to surface.
+      # bare checkout. Nothing should skip here, so any SKIPPED line in the -ra
+      # summary fails the job: a silent skip is exactly the failure CI exists to
+      # surface. `shell: bash` adds pipefail, so pytest's own status survives tee.
       - name: Run tests
-        run: uv run --python '>=3.11' --with pytest --with ruamel.yaml pytest -ra
+        shell: bash
+        run: |
+          uv run --python '>=3.11' --with pytest --with ruamel.yaml pytest -ra | tee pytest.log
+          if grep -q '^SKIPPED' pytest.log; then
+            echo "::error::tests were skipped; CI should run the whole suite"
+            exit 1
+          fi

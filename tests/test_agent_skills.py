@@ -29,8 +29,8 @@ def parse_skill_metadata(text: str) -> tuple[str, str]:
 
     A deliberately small YAML subset — the portable frontmatter format shared by
     Claude Code and Codex: plain scalars, single/double-quoted scalars, and
-    literal (`|`) or folded (`>`, `>-`) block scalars. Unrelated keys are
-    ignored, since Codex adds its own (`tool_type`, `primary_tool`).
+    literal (`|`) or folded (`>`, `>-`) block scalars. Other keys are ignored
+    here; test_bundled_skills_use_only_portable_frontmatter keeps them out.
     """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
@@ -108,7 +108,7 @@ def test_parses_stripped_folded_block_scalar():
 
 
 def test_ignores_unrelated_frontmatter_keys():
-    """Codex-specific keys must not confuse the portable parser."""
+    """Keys other agents may add must not confuse the portable parser."""
     text = (
         "---\nname: example\ntool_type: cli\n"
         "description: Does a thing.\nprimary_tool: samtools\n---\n"
@@ -159,3 +159,39 @@ def test_bundled_skill_frontmatter_is_valid(skill):
 def test_bundled_skill_names_are_unique():
     names = [p.name for p in _bundled_skills()]
     assert len(names) == len(set(names))
+
+
+def _frontmatter_keys(text: str) -> set[str]:
+    lines = text.splitlines()
+    end = lines.index("---", 1)
+    return {
+        line.split(":", 1)[0]
+        for line in lines[1:end]
+        if line and not line[0].isspace() and ":" in line
+    }
+
+
+@pytest.mark.parametrize(
+    "skill", _bundled_skills(), ids=lambda p: p.name
+)
+def test_bundled_skills_use_only_portable_frontmatter(skill):
+    """docs/agent-skills.md: only `name` and `description`, so one SKILL.md
+    means the same thing to Claude Code and Codex."""
+    keys = _frontmatter_keys((skill / "SKILL.md").read_text(encoding="utf-8"))
+    assert keys <= {"name", "description"}, f"{skill.name}: {sorted(keys)}"
+
+
+@pytest.mark.parametrize(
+    "skill", _bundled_skills(), ids=lambda p: p.name
+)
+def test_bundled_skills_stay_small_and_links_resolve(skill):
+    """Claude Code's skill guidance caps SKILL.md at 500 lines; anything longer
+    belongs in references/. Relative links must point at shipped files."""
+    for md in skill.rglob("*.md"):
+        text = md.read_text(encoding="utf-8")
+        if md.name == "SKILL.md":
+            assert len(text.splitlines()) <= 500, f"{skill.name}/SKILL.md is too long"
+        for target in re.findall(r"\]\(([^)#\s]+)\)", text):
+            if "://" in target or target.startswith("mailto:"):
+                continue
+            assert (md.parent / target).exists(), f"{md.relative_to(SKILLS_DIR)} -> {target}"

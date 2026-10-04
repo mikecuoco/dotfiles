@@ -5,9 +5,9 @@ description: >-
   Use when running QC, normalization, HVG selection, PCA, k-NN graph, Harmony batch integration,
   Leiden clustering, UMAP/PaCMAP embedding, label transfer, marker gene detection, or pseudobulk
   differential expression on datasets too large or too slow for Scanpy.
-tool_type: python
-primary_tool: brisc
 ---
+
+# brisc
 
 ## Version Compatibility
 
@@ -262,14 +262,6 @@ sc.read_obsm()
 | Slow embedding on millions of cells | `umap()` default is single-threaded | Switch to `pacmap()` or `localmap()`; use `umap(hogwild=True)` only if UMAP is required |
 | `ryp` import error on DE or Seurat I/O | R packages not configured | Install R `arrow` + `limma`; check `ryp` is installed in the same Python env |
 | Volcano or marker result empty | `min_cells` too high in `pb.qc()` | Lower `min_cells` or increase the per-cell-type sample count |
-
-## Related Skills
-
-- bio-single-cell-preprocessing — Scanpy/Seurat QC, ambient removal, normalization (when not using brisc)
-- bio-single-cell-batch-integration — Harmony, scVI, and other integration methods
-- bio-single-cell-clustering — Leiden clustering, resolution selection, cluster annotation
-- bio-single-cell-differential-abundance — compositional analysis across conditions
-- bio-single-cell-markers-annotation — marker gene interpretation and cell type assignment
 
 ## References
 

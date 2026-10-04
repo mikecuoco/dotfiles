@@ -8,6 +8,8 @@ survives, and re-applying changes nothing.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import tomllib
 
 import pytest
@@ -39,14 +41,13 @@ COMMON_SYMLINKS = (
     ".dircolors",
     ".gemrc",
     ".aws/config",
-    ".claude/settings.json",
 )
 
 #: Composed from fragments, so regular files rather than symlinks.
 GENERATED = (".claude/CLAUDE.md", ".codex/AGENTS.md", ".config/dotfiles/profile")
 
 #: Merged into whatever the app already wrote there.
-MERGED = (".codex/config.toml",)
+MERGED = (".codex/config.toml", ".claude/settings.json")
 
 #: Overlay files that must appear for their profile and no other.
 PROFILE_ONLY = {
@@ -109,16 +110,39 @@ def test_profile_overlays_are_exclusive(applied):
             assert not (home / rel).exists(), f"{profile} should not have {rel}"
 
 
-def test_vim_tree_is_per_file_symlinks(applied):
-    """~/.vim expands to a real directory so vim's runtime state stays local."""
-    _, home = applied
-    vim = home / ".vim"
-    assert vim.is_dir() and not vim.is_symlink()
-    assert (vim / "colors" / "molokai.vim").is_symlink()
+def _login_shell(home, *flags):
+    env = {
+        "HOME": str(home),
+        "PATH": os.environ["PATH"],
+        "TERM": "dumb",
+        "USER": os.environ.get("USER", "tester"),
+    }
+    return subprocess.run(
+        ["bash", "--login", *flags, "-c", "true"],
+        env=env, cwd=home, capture_output=True, text=True, check=False,
+    )
 
 
-BUNDLED_SKILLS = ("beaker-gpu-jobs", "brisc", "code-ocean-capsule", "conda-environments",
-                  "jupyter-workflow", "project-memory", "scientific-plotting",
+def test_login_shell_starts_cleanly(applied):
+    """The installed startup files source without a single error line."""
+    profile, home = applied
+    result = _login_shell(home)
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == "", f"{profile}: {result.stderr}"
+
+
+def test_linux_overlay_is_sourced_exactly_for_linux_profiles(applied):
+    """cluster, codeocean and codespace build on linux, so ~/.exports.linux
+    must actually be sourced, not merely installed. `-v` echoes every line
+    bash reads, including from sourced files."""
+    profile, home = applied
+    marker = "# ~/.exports.linux"
+    sourced = _login_shell(home, "-v").stderr.count(marker)
+    assert sourced == (0 if profile == "macos" else 1), profile
+
+
+BUNDLED_SKILLS = ("beaker-gpu-jobs", "brisc", "code-ocean-capsule",
+                  "conda-environments", "jupyter-workflow", "project-memory",
                   "sea-ad-s3")
 
 
@@ -192,6 +216,37 @@ def test_codex_config_merge_does_not_accrete_on_reapply(tmp_path):
 
     assert config.read_text() == first
     assert first.count("# >>> dotfiles managed Codex preferences >>>") == 1
+
+
+def test_codex_config_is_private(tmp_path):
+    """It sits beside auth state and can hold tokens, so keep it 0600."""
+    assert apply_chezmoi(tmp_path, "linux").returncode == 0
+    mode = (tmp_path / ".codex" / "config.toml").stat().st_mode & 0o777
+    assert mode == 0o600, oct(mode)
+
+
+def test_claude_settings_merge_keeps_app_writes_and_owned_values(tmp_path):
+    """Claude Code writes settings.json itself; those writes must survive apply
+    and must never reach the source tree."""
+    (tmp_path / ".claude").mkdir()
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.write_text(json.dumps({
+        "model": "opus",
+        "permissions": {"allow": ["Bash(ls)"], "deny": []},
+        "cleanupPeriodDays": 7,
+    }))
+
+    assert apply_chezmoi(tmp_path, "linux").returncode == 0
+
+    assert not settings.is_symlink()
+    merged = json.loads(settings.read_text())
+    assert merged["model"] == "opus"
+    assert merged["permissions"]["allow"] == ["Bash(ls)"]
+    assert merged["cleanupPeriodDays"] == 30
+    assert "Read(~/.extra)" in merged["permissions"]["deny"]
+
+    assert apply_chezmoi(tmp_path, "linux").returncode == 0
+    assert json.loads(settings.read_text()) == merged
 
 
 def test_claude_json_merge_preserves_unrelated_keys(tmp_path):

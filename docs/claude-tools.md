@@ -3,7 +3,8 @@
 ## Plugins and marketplaces
 
 Plugins are **declared, not installed by a script.** They live in
-`home/dot_claude/settings.json`, which chezmoi installs as `~/.claude/settings.json`:
+`home/.chezmoitemplates/claude-settings.json`, which chezmoi merges into
+`~/.claude/settings.json`:
 
 ```json
 "enabledPlugins": {
