@@ -117,7 +117,7 @@ def test_vim_tree_is_per_file_symlinks(applied):
     assert (vim / "colors" / "molokai.vim").is_symlink()
 
 
-BUNDLED_SKILLS = ("brisc", "code-ocean-capsule", "conda-environments",
+BUNDLED_SKILLS = ("beaker-gpu-jobs", "brisc", "code-ocean-capsule", "conda-environments",
                   "jupyter-workflow", "project-memory", "scientific-plotting",
                   "sea-ad-s3")
 

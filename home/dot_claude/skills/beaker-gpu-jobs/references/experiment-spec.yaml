@@ -1,0 +1,48 @@
+# Beaker v2 experiment spec template for a batch GPU job.
+# Copy to <repo>/beaker/<job>.yaml, replace every <placeholder>, delete what
+# you do not need, and submit with:
+#   beaker experiment create --workspace <workspace> --name <job>-<stamp> beaker/<job>.yaml
+version: v2
+description: <one line: what this run does>
+# Required unless the workspace has a default budget (`beaker workspace get`).
+# ai1/octo.aihub-lowpri is for low-priority testing; confirm project budgets.
+budget: <budget>
+tasks:
+  - name: <task>
+    image:
+      beaker: <user>/<image>            # owner-qualified; built per references/image-build.md
+    datasets:
+      - mountPath: /code                # read-only code snapshot from `beaker dataset create`
+        source:
+          beaker: <user>/<project>-code-<stamp>
+    command: [bash, -lc]
+    arguments:
+      - |
+        set -euo pipefail
+        nvidia-smi
+        python -c 'import torch; assert torch.cuda.is_available(), "no GPU"; print(torch.cuda.get_device_name(0))'
+        python /code/<entry>.py --out /results
+    result:
+      path: /results                    # everything written here becomes the result dataset
+    envVars:
+      # AI Hub AWS nodes read S3 with their own IAM role: set only the region.
+      # Add key secrets only if a bucket needs them; they override the node
+      # role, and an expired session token then fails with ExpiredToken.
+      #   - name: AWS_ACCESS_KEY_ID
+      #     secret: <access-key-id-secret>
+      - name: AWS_DEFAULT_REGION
+        value: us-west-2
+    resources:
+      gpuCount: 1                       # smoke-test with 1; ask before requesting more
+      cpuCount: 8
+      memory: 64GiB
+    context:
+      priority: low
+      # Low priority jobs can be preempted and are auto-resumed from the start;
+      # make them resumable. minRuntime: 2h protects the first two hours.
+    constraints:                        # task-level, not under context
+      # S3 access via the node role differs by cluster; for S3-reading jobs
+      # list only clusters that passed an S3 smoke test.
+      cluster:
+        - ai1/aipbd-aws-h200
+        - ai1/octo-hub-aws-h200
