@@ -1,0 +1,35 @@
+#!/bin/sh
+# project-env: build a project's conda env on top of the image's PyTorch.
+#
+#   project-env [ENV_FILE] [PREFIX]   defaults: /code/env/environment.yml /opt/env
+#
+# The image's torch is pip-installed into its system Python. The env gets the
+# same Python minor version plus a .pth entry for the image's site-packages, so
+# it imports that torch while its own packages take precedence. The .pth is
+# written before the env file is installed so `pip:` dependencies see torch as
+# already installed instead of downloading another copy.
+set -eu
+env_file=${1:-/code/env/environment.yml}
+prefix=${2:-/opt/env}
+image_python=${IMAGE_PYTHON:-/usr/bin/python3}
+
+purelib='import sysconfig; print(sysconfig.get_paths()["purelib"])'
+py_version=$("$image_python" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+image_site=$("$image_python" -c "$purelib")
+
+micromamba create -y -p "$prefix" "python=$py_version"
+printf '%s\n' "$image_site" > "$("$prefix/bin/python" -c "$purelib")/zz-image-site.pth"
+# micromamba writes pip requirements beside the env file, and /code is a
+# read-only dataset mount, so install from a writable copy.
+work=$(mktemp -d)
+cp "$env_file" "$work/environment.yml"
+micromamba install -y -p "$prefix" -f "$work/environment.yml"
+rm -rf "$work"
+
+"$prefix/bin/python" - "$image_site" <<'PY'
+import os, sys, torch
+assert torch.__file__.startswith(sys.argv[1]), f"env shadows the image torch: {torch.__file__}"
+expected = os.environ.get("PYTORCH_VERSION")
+assert not expected or torch.__version__.startswith(expected), torch.__version__
+print(f"project env ready: torch {torch.__version__} from the image")
+PY
