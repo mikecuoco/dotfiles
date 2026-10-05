@@ -7,6 +7,16 @@
 # Working style
 
 - Lead with the answer. Keep prose concise.
+- Write about 80% of the way to ASD-STE100 Simplified Technical English:
+  - Use short sentences: at most 20 words for steps and 25 for descriptions.
+  - Use the active voice, and the imperative for steps. Put one idea in each
+    sentence.
+  - Use common words, and one term for each concept. Do not use idioms or
+    phrasal verbs.
+  - Keep technical names, identifiers, and domain terms. Do not force the
+    STE dictionary where it makes the text less precise.
+- Use diagrams where possible to show structure, flow, or data movement. In
+  plans, include ASCII diagrams.
 - Investigate uncertainty; do not guess.
 - Ask only when ambiguity materially affects the result.
 
