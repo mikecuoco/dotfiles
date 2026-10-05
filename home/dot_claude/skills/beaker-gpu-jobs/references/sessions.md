@@ -10,17 +10,20 @@ beaker session create \
   --cluster ai1/aipbd-aws-h200 --cluster ai1/octo-hub-aws-h200 \
   --gpus 1 \
   --key ~/.ssh/id_ed25519 \
-  --image beaker://<user>/<image>
+  --mount src=beaker,ref=<user>/<project>-code-<stamp>,dst=/code \
+  --image beaker://<user>/torch-base-<torch>-cu<xx>-v<n>
 ```
 
 - `--bare` gives a shell without running an entrypoint.
+- `--mount` puts the code dataset, including `env/environment.yml`, at `/code`.
 - Add `--min-runtime 2h` to protect a low-priority session from preemption for that long.
 - Use `--detach` instead of `--remote` to start it in the background.
 - No Docker is needed; the image is already in Beaker.
 
-Inside the session:
+Inside the session, install the project env exactly as a batch job does, then check torch:
 
 ```bash
+project-env
 nvidia-smi
 python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())'
 ```

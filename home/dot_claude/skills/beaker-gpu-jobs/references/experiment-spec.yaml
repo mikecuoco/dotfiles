@@ -10,15 +10,18 @@ budget: <budget>
 tasks:
   - name: <task>
     image:
-      beaker: <user>/<image>            # owner-qualified; built per references/image-build.md
+      beaker: <user>/torch-base-<torch>-cu<xx>-v<n>   # shared base, references/image-build.md
     datasets:
-      - mountPath: /code                # read-only code snapshot from `beaker dataset create`
+      - mountPath: /code                # read-only code + env/environment.yml from `beaker dataset create`
         source:
           beaker: <user>/<project>-code-<stamp>
     command: [bash, -lc]
     arguments:
       - |
         set -euo pipefail
+        # Build /opt/env from /code/env/environment.yml on top of the image's
+        # torch; fails if the env would shadow it. /opt/env/bin is first on PATH.
+        project-env
         nvidia-smi
         python -c 'import torch; assert torch.cuda.is_available(), "no GPU"; print(torch.cuda.get_device_name(0))'
         python /code/<entry>.py --out /results

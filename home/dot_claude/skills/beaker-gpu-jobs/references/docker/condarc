@@ -1,0 +1,6 @@
+# Read by micromamba (and conda) for every install into the image.
+# Matches the conda-environments skill: conda-forge first, strict priority.
+channels:
+  - conda-forge
+  - bioconda
+channel_priority: strict
